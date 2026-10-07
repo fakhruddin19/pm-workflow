@@ -485,6 +485,7 @@ export default function ProjectDetail() {
         open={submitOpen}
         onOpenChange={setSubmitOpen}
         projectId={id}
+        project={project}
         task={submittingTask}
         onSubmitted={loadAll}
       />
@@ -680,29 +681,47 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
   );
 }
 
-function SubmitDialog({ open, onOpenChange, projectId, task, onSubmitted }) {
+function SubmitDialog({ open, onOpenChange, projectId, project, task, onSubmitted }) {
   const [fileName, setFileName] = useState("");
   const [driveLink, setDriveLink] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const ownerDriveUrl = project?.drive_folder_url || "";
+
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      setDriveLink(ownerDriveUrl);
+    } else {
       setFileName("");
       setDriveLink("");
       setNote("");
     }
-  }, [open]);
+  }, [open, ownerDriveUrl]);
+
+  const openOwnerDrive = () => {
+    if (ownerDriveUrl) {
+      window.open(ownerDriveUrl, "_blank", "noopener,noreferrer");
+      toast.info("Membuka folder Google Drive proyek...");
+    } else {
+      toast.error("Owner belum menyetel link Google Drive untuk proyek ini");
+    }
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     if (!task) return;
     setSaving(true);
     try {
+      if (ownerDriveUrl) {
+        window.open(ownerDriveUrl, "_blank", "noopener,noreferrer");
+      }
       await api.post(`/projects/${projectId}/tasks/${task.id}/submit`, {
-        file_name: fileName,
-        drive_link: driveLink,
+        file_name: fileName || "output_tugas.zip",
+        drive_link: driveLink || ownerDriveUrl,
         note,
       });
-      toast.success("Deliverable disimpan ke Google Drive (mock)");
+      toast.success("Deliverable berhasil disimpan!");
       onOpenChange(false);
       onSubmitted();
     } catch (err) {
@@ -711,55 +730,96 @@ function SubmitDialog({ open, onOpenChange, projectId, task, onSubmitted }) {
       setSaving(false);
     }
   };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-card border-border" data-testid="submit-dialog">
+      <DialogContent className="bg-card border-border sm:max-w-lg" data-testid="submit-dialog">
         <DialogHeader>
-          <DialogTitle>Submit Deliverable</DialogTitle>
+          <DialogTitle>Submit Tugas & Deliverable</DialogTitle>
           <DialogDescription>
-            Masukkan nama file atau link Google Drive dari hasil pekerjaan Anda.
-            {task && <span className="block mt-1 text-indigo-300">Tugas: {task.title}</span>}
+            Kirimkan hasil pekerjaan Anda langsung ke folder Google Drive proyek.
+            {task && <span className="block mt-1 font-medium text-indigo-300">Tugas: {task.title}</span>}
           </DialogDescription>
         </DialogHeader>
+
         <form onSubmit={submit} className="space-y-4">
+          {ownerDriveUrl ? (
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                  <HardDrive className="h-4 w-4" /> Folder Google Drive Proyek
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={openOwnerDrive}
+                  className="h-7 text-xs border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/20"
+                >
+                  Buka Folder Drive ↗
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Folder Google Drive ini telah disiapkan oleh Project Owner. Unggah file hasil kerja Anda (.shp, .dwg, .zip) ke folder tersebut.
+              </p>
+            </div>
+          ) : (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+              ⚠️ Owner belum memasukkan link Google Drive untuk proyek ini.
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label>Nama File</Label>
+            <Label>Nama File / Identitas Pekerjaan</Label>
             <Input
               value={fileName}
               onChange={(e) => setFileName(e.target.value)}
-              placeholder="hasil-kontur-zona7.dwg"
+              placeholder="hasil-kontur-zona7.dwg / peta_shp.zip"
               data-testid="file-upload-input"
               className="bg-background"
             />
           </div>
+
           <div className="space-y-2">
-            <Label>Google Drive Link (opsional)</Label>
+            <Label>Google Drive Link</Label>
             <Input
               value={driveLink}
               onChange={(e) => setDriveLink(e.target.value)}
-              placeholder="https://drive.google.com/file/d/..."
+              placeholder="https://drive.google.com/..."
               data-testid="gdrive-file-link-input"
               className="bg-background"
             />
           </div>
+
           <div className="space-y-2">
-            <Label>Catatan</Label>
+            <Label>Catatan untuk Koordinator / Owner</Label>
             <Textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Catatan tambahan"
+              placeholder="Contoh: Sudah selesai digitasi 14 kecamatan, siap divalidasi ke tahap selanjutnya."
               className="bg-background"
               data-testid="deliverable-note-input"
             />
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            {ownerDriveUrl && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={openOwnerDrive}
+                className="w-full sm:w-auto border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+              >
+                Buka Drive ↗
+              </Button>
+            )}
             <Button
               type="submit"
               disabled={saving}
-              className="bg-indigo-500 hover:bg-indigo-600 w-full"
+              className="bg-indigo-500 hover:bg-indigo-600 flex-1"
               data-testid="confirm-submit-deliverable-btn"
             >
-              {saving ? "Menyimpan..." : "Kirim Deliverable"}
+              {saving ? "Menyimpan..." : ownerDriveUrl ? "Buka Drive & Kirim Tugas" : "Kirim Deliverable"}
             </Button>
           </DialogFooter>
         </form>
