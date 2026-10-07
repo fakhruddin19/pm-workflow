@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: #0B0F17;
+    color: #F9FAFB;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.font-mono, code {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+    :root {
+        --background: 222 42% 7%;
+        --foreground: 210 20% 98%;
+        --card: 215 28% 17%;
+        --card-foreground: 210 20% 98%;
+        --popover: 215 28% 17%;
+        --popover-foreground: 210 20% 98%;
+        --primary: 240 76% 66%;
+        --primary-foreground: 210 20% 98%;
+        --secondary: 215 28% 17%;
+        --secondary-foreground: 210 20% 98%;
+        --muted: 217 19% 27%;
+        --muted-foreground: 215 20% 65%;
+        --accent: 160 84% 39%;
+        --accent-foreground: 210 20% 98%;
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 210 20% 98%;
+        --border: 217 19% 27%;
+        --input: 217 19% 27%;
+        --ring: 240 76% 66%;
+        --radius: 0.75rem;
+        --chart-1: 240 76% 66%;
+        --chart-2: 160 84% 39%;
+        --chart-3: 38 92% 50%;
+        --chart-4: 0 72% 51%;
+        --chart-5: 280 65% 60%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-track {
+    background: #0B0F17;
+}
+::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #4B5563;
+}
+
+/* Grain overlay texture */
+.grain-overlay::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.03;
+    z-index: 1;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Subtle gradient accent for key surfaces */
+.accent-glow {
+    background: radial-gradient(circle at 20% 20%, rgba(99,102,241,0.08), transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(16,185,129,0.06), transparent 50%);
+}
+
+/* Stage column styling */
+.stage-column {
+    background: linear-gradient(180deg, rgba(31,41,55,0.6) 0%, rgba(17,24,39,0.4) 100%);
+    backdrop-filter: blur(12px);
+}
+
+/* Monospace timer pill */
+.timer-pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.375rem;
+    background: rgba(16, 185, 129, 0.12);
+    color: #34D399;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.timer-pill-warn {
+    background: rgba(245, 158, 11, 0.12);
+    color: #FBBF24;
+    border-color: rgba(245, 158, 11, 0.2);
+}
+
+.timer-pill-danger {
+    background: rgba(239, 68, 68, 0.12);
+    color: #F87171;
+    border-color: rgba(239, 68, 68, 0.2);
+}
