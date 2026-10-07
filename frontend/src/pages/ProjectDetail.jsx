@@ -640,12 +640,27 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
     }
   };
 
+  const shareWhatsApp = () => {
+    const text = encodeURIComponent(
+      `Halo! Anda diundang bergabung ke proyek di WorkflowDrive sebagai ${role}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${projectLink}`
+    );
+    window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
+  };
+
+  const shareEmail = () => {
+    const subject = encodeURIComponent("Undangan Bergabung ke Proyek WorkflowDrive");
+    const body = encodeURIComponent(
+      `Halo!\n\nAnda diundang bergabung ke proyek di WorkflowDrive sebagai ${role}.\n\nSilakan klik link berikut untuk membuka proyek:\n${projectLink}`
+    );
+    window.open(`mailto:${email || ""}?subject=${subject}&body=${body}`, "_blank");
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
       await api.post(`/projects/${projectId}/invite`, { email, role, project_link: projectLink });
-      toast.success("Undangan berhasil dicatat dan link proyek siap dibagikan!");
+      toast.success(`Undangan untuk ${email} berhasil dicatat ke proyek!`);
       setEmail("");
       onOpenChange(false);
       onInvited();
@@ -662,28 +677,39 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
         <DialogHeader>
           <DialogTitle>Undang Rekan Tim ke Proyek</DialogTitle>
           <DialogDescription>
-            Kirim undangan email atau bagikan link proyek langsung ke rekan tim Anda.
+            Daftarkan email rekan tim atau bagikan link proyek langsung via WhatsApp/Email.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 space-y-1.5">
+        <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 space-y-2">
           <div className="text-xs font-semibold text-indigo-300 flex items-center justify-between">
             <span>Link Langsung Proyek:</span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={copyLink}
-              className="h-6 text-[11px] border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/20"
-            >
-              Salin Link 📋
-            </Button>
+            <div className="flex gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={copyLink}
+                className="h-6 text-[11px] border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/20"
+              >
+                Salin 📋
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={shareWhatsApp}
+                className="h-6 text-[11px] border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20"
+              >
+                WhatsApp 💬
+              </Button>
+            </div>
           </div>
           <div className="text-[11px] text-muted-foreground truncate font-mono select-all">
             {projectLink}
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Rekan tim Anda cukup membuka link ini di browser HP atau laptop mereka untuk melihat proyek.
+            Rekan tim Anda cukup membuka link ini di HP/laptop dan login dengan email mereka untuk langsung berkolaborasi.
           </p>
         </div>
 

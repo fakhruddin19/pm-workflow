@@ -43,58 +43,194 @@ export async function handleSupabaseRequest(method, url, data) {
     });
   }
 
-  // 2. EMAIL LOGS (INBOX)
+  // 2. EMAIL LOGS (INBOX & NOTIFIKASI REAL-TIME)
   if (cleanUrl === "email-logs" && method === "get") {
     try {
-      const logs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
-      return ok(Array.isArray(logs) ? logs : []);
-    } catch {
-      return ok([]);
+      const emailLower = (currentUserEmail || "").toLowerCase();
+
+      const { data: allProjects } = await supabase.from("projects").select("*");
+      const { data: allMembers } = await supabase.from("project_members").select("*");
+      const { data: allTasks } = await supabase.from("tasks").select("*");
+      const { data: allDeliverables } = await supabase.from("deliverables").select("*");
+
+      const projectsMap = {};
+      (allProjects || []).forEach((p) => {
+        projectsMap[p.id] = p;
+      });
+
+      const inboxItems = [];
+      const sentItems = [];
+
+      // A. Undangan masuk untuk email user saat ini (role != 'owner')
+      (allMembers || []).forEach((m) => {
+        const p = projectsMap[m.project_id];
+        const isTargetUser = (m.email || "").toLowerCase() === emailLower;
+        const isSender = p && (p.owner_id === currentUserId || (allMembers || []).some(x => x.project_id === m.project_id && x.role === "owner" && (x.email || "").toLowerCase() === emailLower));
+
+        if (isTargetUser && m.role !== "owner") {
+          const ownerMember = (allMembers || []).find((x) => x.project_id === m.project_id && x.role === "owner");
+          const ownerName = ownerMember?.name || "Project Owner";
+          inboxItems.push({
+            id: `inv-${m.id}`,
+            subject: `Undangan Proyek: ${p?.name || "Proyek Baru"}`,
+            kind: "UNDANGAN",
+            sent_at: m.created_at,
+            to: m.email,
+            from: ownerName,
+            body: `Halo ${m.name || "Rekan"}!\nAnda diundang oleh ${ownerName} untuk bergabung ke proyek "${p?.name || "Proyek"}" sebagai ${m.role || "drafter"}.\n\nKlik tombol di bawah ini untuk membuka dan mulai berkolaborasi di proyek ini.`,
+            link: `/projects/${m.project_id}`,
+            project_id: m.project_id,
+            project_name: p?.name,
+          });
+        }
+
+        if (isSender && m.role !== "owner") {
+          sentItems.push({
+            id: `sent-${m.id}`,
+            subject: `Undangan ke ${m.email}`,
+            kind: "TERKIRIM",
+            sent_at: m.created_at,
+            to: m.email,
+            role: m.role,
+            project_name: p?.name,
+            project_id: m.project_id,
+            link: `/projects/${m.project_id}`,
+            body: `Undangan telah dikirim ke ${m.email} (${m.name}) untuk proyek "${p?.name}" dengan peran ${m.role}. Rekan Anda dapat membuka link proyek langsung untuk bergabung.`,
+          });
+        }
+      });
+
+      // B. Tugas yang ditugaskan ke user saat ini
+      (allTasks || []).forEach((t) => {
+        const assigneeEmail = (t.assignee?.email || "").toLowerCase();
+        const isAssignee = assigneeEmail === emailLower || t.assignee?.id === currentUserId;
+        if (isAssignee) {
+          const p = projectsMap[t.project_id];
+          inboxItems.push({
+            id: `task-${t.id}`,
+            subject: `Penugasan Tugas: ${t.title}`,
+            kind: "TUGAS",
+            sent_at: t.created_at,
+            to: currentUserEmail,
+            body: `Anda ditugaskan mengerjakan "${t.title}" pada proyek "${p?.name || "Proyek"}".\nTahap: ${t.stage || "Drafter"}.${t.sla_days ? `\nSLA: ${t.sla_days} Hari.` : ""}`,
+            link: `/projects/${t.project_id}`,
+            project_id: t.project_id,
+          });
+        }
+      });
+
+      // C. Submit tugas dari tim (khusus project yang dimiliki user ini)
+      (allDeliverables || []).forEach((d) => {
+        const p = projectsMap[d.project_id];
+        if (p && p.owner_id === currentUserId && d.user_id !== currentUserId) {
+          inboxItems.push({
+            id: `deliv-${d.id}`,
+            subject: `Hasil Tugas Dikirim: ${d.task_title}`,
+            kind: "SUBMIT",
+            sent_at: d.created_at,
+            to: currentUserEmail,
+            body: `${d.user_name || "Anggota tim"} telah mengirim berkas untuk tugas "${d.task_title}" pada tahap ${d.stage}.\nCatatan: ${d.note || "-"}\nFile: ${d.file_name || "Google Drive"}`,
+            link: `/projects/${d.project_id}`,
+            drive_link: d.drive_link,
+            project_id: d.project_id,
+          });
+        }
+      });
+
+      inboxItems.sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime());
+      sentItems.sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime());
+
+      return ok({
+        inbox: inboxItems,
+        sent: sentItems,
+      });
+    } catch (e) {
+      console.error("Error fetching email logs:", e);
+      return ok({ inbox: [], sent: [] });
     }
   }
 
   // 3. DASHBOARD
   if (cleanUrl === "dashboard" && method === "get") {
+    const emailLower = (currentUserEmail || "").toLowerCase();
     const { data: projects } = await supabase.from("projects").select("*");
     const { data: tasks } = await supabase.from("tasks").select("*");
+    const { data: members } = await supabase.from("project_members").select("*");
 
     const projs = projects || [];
     const tsks = tasks || [];
+    const mems = members || [];
 
-    const myTasks = tsks.filter((t) => t.assignee?.id === currentUserId);
+    const memberProjectIds = new Set(
+      mems.filter((m) => (m.email || "").toLowerCase() === emailLower).map((m) => m.project_id)
+    );
+
+    const visibleProjects = projs.filter(
+      (p) => p.owner_id === currentUserId || memberProjectIds.has(p.id)
+    );
+
+    const myTasks = tsks.filter(
+      (t) => t.assignee?.id === currentUserId || (t.assignee?.email && t.assignee.email.toLowerCase() === emailLower)
+    );
+
     const stageCounts = {};
-    tsks.forEach((t) => {
-      const s = t.stage || "Drafter";
-      stageCounts[s] = (stageCounts[s] || 0) + 1;
-    });
+    tsks
+      .filter((t) => visibleProjects.some((vp) => vp.id === t.project_id))
+      .forEach((t) => {
+        const s = t.stage || "Drafter";
+        stageCounts[s] = (stageCounts[s] || 0) + 1;
+      });
 
-    let emailLogs = [];
-    try {
-      emailLogs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
-    } catch {}
+    // Recent activity for dashboard
+    const recentNotifs = [];
+    mems
+      .filter((m) => (m.email || "").toLowerCase() === emailLower && m.role !== "owner")
+      .forEach((m) => {
+        const p = projs.find((x) => x.id === m.project_id);
+        recentNotifs.push({
+          id: `m-${m.id}`,
+          subject: `Undangan: ${p?.name || "Proyek"}`,
+          kind: "UNDANGAN",
+          to: m.email,
+        });
+      });
 
     return ok({
-      total_projects: projs.length,
+      total_projects: visibleProjects.length,
       owned_projects: projs.filter((p) => p.owner_id === currentUserId).length,
-      total_tasks: tsks.length,
+      total_tasks: tsks.filter((t) => visibleProjects.some((vp) => vp.id === t.project_id)).length,
       my_tasks: myTasks.length,
       stage_counts: stageCounts,
-      recent_emails: Array.isArray(emailLogs) ? emailLogs.slice(0, 10) : [],
+      recent_emails: recentNotifs.slice(0, 5),
     });
   }
 
   // 4. PROJECTS LIST & CREATE
   if (cleanUrl === "projects" && method === "get") {
+    const emailLower = (currentUserEmail || "").toLowerCase();
     const { data: projects, error } = await supabase
       .from("projects")
       .select("*")
       .order("created_at", { ascending: false });
     if (error) throw error;
 
-    const list = (projects || []).map((p) => ({
-      ...p,
-      role: p.owner_id === currentUserId ? "owner" : "member",
-    }));
+    const { data: myMemberships } = await supabase
+      .from("project_members")
+      .select("*");
+
+    const membershipRoleMap = {};
+    (myMemberships || []).forEach((m) => {
+      if ((m.email || "").toLowerCase() === emailLower) {
+        membershipRoleMap[m.project_id] = m.role || "member";
+      }
+    });
+
+    const list = (projects || [])
+      .filter((p) => p.owner_id === currentUserId || membershipRoleMap[p.id])
+      .map((p) => ({
+        ...p,
+        role: p.owner_id === currentUserId ? "owner" : (membershipRoleMap[p.id] || "member"),
+      }));
     return ok(list);
   }
 
@@ -115,6 +251,18 @@ export async function handleSupabaseRequest(method, url, data) {
     };
     const { data: created, error } = await supabase.from("projects").insert(newProj).select().single();
     if (error) throw error;
+
+    // Auto add owner to project_members
+    await supabase.from("project_members").insert({
+      id: "mem-" + Date.now(),
+      project_id: created.id,
+      user_id: currentUserId,
+      email: currentUserEmail,
+      name: currentUserName,
+      role: "owner",
+      created_at: now,
+    });
+
     return ok({ ...created, role: "owner" });
   }
 
@@ -222,44 +370,56 @@ export async function handleSupabaseRequest(method, url, data) {
     const { data: members, error } = await supabase.from("project_members").select("*").eq("project_id", projId);
     if (error) throw error;
 
+    const all = members || [];
+    const ownerMember = all.find((m) => m.role === "owner" || m.user_id === proj?.owner_id);
+    const guestMembers = all.filter((m) => m.role !== "owner" && m.user_id !== proj?.owner_id);
+
     return ok({
-      owner: { id: proj?.owner_id || currentUserId, name: currentUserName, email: currentUserEmail },
-      members: members || [],
+      owner: ownerMember
+        ? { id: ownerMember.user_id, name: ownerMember.name, email: ownerMember.email }
+        : { id: proj?.owner_id || currentUserId, name: "Project Owner", email: "" },
+      members: guestMembers,
     });
   }
 
   // Invite member: /projects/:id/invite
   if (parts[0] === "projects" && parts[2] === "invite" && method === "post") {
     const projId = parts[1];
-    const newMember = {
-      id: "mem-" + Date.now(),
-      project_id: projId,
-      user_id: "usr-" + Date.now(),
-      email: data.email,
-      name: data.email.split("@")[0],
-      role: data.role || "drafter",
-      created_at: now,
-    };
-    const { data: created, error } = await supabase.from("project_members").insert(newMember).select().single();
-    if (error) throw error;
+    const targetEmail = (data.email || "").trim().toLowerCase();
 
-    // Log invite email with direct project link
-    try {
-      const projectLink = data.project_link || (typeof window !== "undefined" ? `${window.location.origin}/projects/${projId}` : "");
-      const logs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
-      logs.unshift({
-        id: "log-" + Date.now(),
-        to: data.email,
-        subject: `Undangan Bergabung ke Proyek`,
-        kind: "INVITE",
-        body: `Anda diundang oleh ${currentUserName} untuk bergabung ke proyek sebagai ${data.role || "drafter"}.\n\nKlik link di bawah ini untuk langsung membuka proyek:\n${projectLink}`,
-        link: projectLink,
-        sent_at: now,
-      });
-      localStorage.setItem("wd_email_logs", JSON.stringify(logs));
-    } catch {}
+    // Check if member already in project
+    const { data: existing } = await supabase
+      .from("project_members")
+      .select("*")
+      .eq("project_id", projId)
+      .eq("email", targetEmail);
 
-    return ok(created);
+    let result;
+    if (existing && existing.length > 0) {
+      const { data: updated, error } = await supabase
+        .from("project_members")
+        .update({ role: data.role || "drafter", name: data.name || targetEmail.split("@")[0] })
+        .eq("id", existing[0].id)
+        .select()
+        .single();
+      if (error) throw error;
+      result = updated;
+    } else {
+      const newMember = {
+        id: "mem-" + Date.now(),
+        project_id: projId,
+        user_id: "usr-" + Date.now(),
+        email: targetEmail,
+        name: data.name || targetEmail.split("@")[0],
+        role: data.role || "drafter",
+        created_at: now,
+      };
+      const { data: created, error } = await supabase.from("project_members").insert(newMember).select().single();
+      if (error) throw error;
+      result = created;
+    }
+
+    return ok(result);
   }
 
   // Remove member: /projects/:id/members/:memberId

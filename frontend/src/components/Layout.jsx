@@ -23,7 +23,7 @@ import { Avatar, AvatarFallback } from "./ui/avatar";
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, test: "nav-dashboard" },
   { to: "/projects", label: "Daftar Project", icon: FolderKanban, test: "nav-projects" },
-  { to: "/inbox", label: "Inbox (Mock)", icon: InboxIcon, test: "nav-inbox" },
+  { to: "/inbox", label: "Inbox", icon: InboxIcon, test: "nav-inbox" },
 ];
 
 export default function Layout({ children, title, subtitle, actions }) {
