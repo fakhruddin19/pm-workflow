@@ -40,34 +40,37 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn, formatDuration, durationLevel, initials, normalizeStages, stageNames, slaOf } from "../lib/utils";
+import { cn, formatDuration, durationLevel, getSlaInfo, initials, normalizeStages, stageNames } from "../lib/utils";
 import WorkflowDiagram from "../components/WorkflowDiagram";
 
-function Timer({ fromISO, slaHours }) {
+function Timer({ fromISO, slaDays }) {
   const [, setT] = useState(0);
   useEffect(() => {
-    const i = setInterval(() => setT((x) => x + 1), 30_000); // tick every 30s
+    const i = setInterval(() => setT((x) => x + 1), 60_000);
     return () => clearInterval(i);
   }, []);
-  const level = durationLevel(fromISO, slaHours);
+  const info = getSlaInfo(fromISO, slaDays);
+  if (!slaDays) return null;
   return (
     <span
       className={cn(
-        "timer-pill",
-        level === "warn" && "timer-pill-warn",
-        level === "danger" && "timer-pill-danger"
+        "timer-pill text-[10px]",
+        info.level === "warn" && "timer-pill-warn",
+        info.level === "danger" && "timer-pill-danger"
       )}
+      title={`Batas SLA: ${slaDays} Hari`}
       data-testid="stage-duration-timer"
     >
       <Clock className="inline h-2.5 w-2.5 mr-1 -mt-0.5" />
-      {formatDuration(fromISO)}
+      SLA {slaDays} Hari ({info.label})
     </span>
   );
 }
 
-function TaskCard({ task, stageNameList, slaHours, isOwner, onMove, onSubmit, onDelete }) {
+function TaskCard({ task, stageNameList, isOwner, onMove, onSubmit, onDelete }) {
   const nextStageIndex = stageNameList.indexOf(task.stage) + 1;
   const nextStage = nextStageIndex < stageNameList.length ? stageNameList[nextStageIndex] : null;
+  const taskSlaDays = task.sla_days || 2;
   return (
     <div
       className="p-3 rounded-lg bg-card border border-border hover:border-indigo-500/40 transition-all space-y-2"
@@ -103,7 +106,7 @@ function TaskCard({ task, stageNameList, slaHours, isOwner, onMove, onSubmit, on
         ) : (
           <span className="text-[11px] text-muted-foreground">Belum assign</span>
         )}
-        <Timer fromISO={task.stage_entered_at} slaHours={slaHours} />
+        <Timer fromISO={task.stage_entered_at} slaDays={taskSlaDays} />
       </div>
       <div className="flex gap-1 pt-1">
         {nextStage && (
@@ -271,7 +274,6 @@ export default function ProjectDetail() {
           <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${names.length}, minmax(260px, 1fr))`, overflowX: "auto" }} data-testid="kanban-board-container">
             {names.map((stage) => {
               const stageTasks = tasks.filter((t) => t.stage === stage);
-              const sla = slaOf(stages, stage);
               return (
                 <div
                   key={stage}
@@ -279,16 +281,11 @@ export default function ProjectDetail() {
                   data-testid={`stage-column-${stage}`}
                 >
                   <div className="flex items-center justify-between px-1">
-                    <div>
-                      <div className="font-semibold text-sm" data-testid="stage-column-header">
-                        {stage}
-                      </div>
-                      {sla && (
-                        <div className="text-[10px] text-indigo-300 font-mono">SLA {sla}j</div>
-                      )}
+                    <div className="font-semibold text-sm" data-testid="stage-column-header">
+                      {stage}
                     </div>
                     <span className="text-[10px] text-muted-foreground font-mono">
-                      {stageTasks.length}
+                      {stageTasks.length} tugas
                     </span>
                   </div>
                   <div className="space-y-2">
@@ -302,7 +299,6 @@ export default function ProjectDetail() {
                           key={t.id}
                           task={t}
                           stageNameList={names}
-                          slaHours={sla}
                           isOwner={isOwner}
                           onMove={moveTask}
                           onDelete={deleteTask}
@@ -499,6 +495,7 @@ function TaskCreateDialog({ open, onOpenChange, projectId, stages, members, onCr
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState("none");
   const [stage, setStage] = useState(names[0] || "");
+  const [slaDays, setSlaDays] = useState("2");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -521,11 +518,13 @@ function TaskCreateDialog({ open, onOpenChange, projectId, stages, members, onCr
         description,
         assignee_id: assigneeId === "none" ? null : assigneeId,
         stage,
+        sla_days: Math.max(1, Number(slaDays) || 1),
       });
-      toast.success("Tugas dibuat & email terkirim ke penerima tugas");
+      toast.success("Tugas dibuat & SLA ditetapkan " + (slaDays || 2) + " hari");
       setTitle("");
       setDescription("");
       setAssigneeId("none");
+      setSlaDays("2");
       onOpenChange(false);
       onCreated();
     } catch (err) {
@@ -537,10 +536,10 @@ function TaskCreateDialog({ open, onOpenChange, projectId, stages, members, onCr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-card border-border" data-testid="create-task-dialog">
+      <DialogContent className="bg-card border-border sm:max-w-md" data-testid="create-task-dialog">
         <DialogHeader>
-          <DialogTitle>Tugas Baru</DialogTitle>
-          <DialogDescription>Email notifikasi akan terkirim ke penerima tugas.</DialogDescription>
+          <DialogTitle>Tugas Baru & Pembagian Kerja</DialogTitle>
+          <DialogDescription>Bagi tugas ke personel dan tentukan batas waktu SLA pengerjaan.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
@@ -549,23 +548,24 @@ function TaskCreateDialog({ open, onOpenChange, projectId, stages, members, onCr
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Verifikasi kontur zona 7"
+              placeholder="Contoh: Digitasi Batas Wilayah Zona 1"
               data-testid="task-title-input"
               className="bg-background"
             />
           </div>
           <div className="space-y-2">
-            <Label>Deskripsi</Label>
+            <Label>Deskripsi / Instruksi Kerja</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder="Jelaskan detail instruksi pekerjaan untuk drafter/personel..."
               className="bg-background"
               data-testid="task-description-input"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-2">
-              <Label>Stage Awal</Label>
+              <Label>Tahap Awal</Label>
               <Select value={stage} onValueChange={setStage}>
                 <SelectTrigger className="bg-background" data-testid="task-stage-select">
                   <SelectValue />
@@ -595,6 +595,20 @@ function TaskCreateDialog({ open, onOpenChange, projectId, stages, members, onCr
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>SLA (Hari)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="60"
+                required
+                value={slaDays}
+                onChange={(e) => setSlaDays(e.target.value)}
+                placeholder="2"
+                className="bg-background"
+                title="Batas waktu pengerjaan tugas dalam hitungan hari"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -603,7 +617,7 @@ function TaskCreateDialog({ open, onOpenChange, projectId, stages, members, onCr
               className="bg-indigo-500 hover:bg-indigo-600 w-full"
               data-testid="assign-task-submit-btn"
             >
-              {saving ? "Menyimpan..." : "Buat & Kirim Notifikasi"}
+              {saving ? "Menyimpan..." : "Tugaskan Personel"}
             </Button>
           </DialogFooter>
         </form>
@@ -616,12 +630,22 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
   const [saving, setSaving] = useState(false);
+
+  const projectLink = typeof window !== "undefined" ? `${window.location.origin}/projects/${projectId}` : "";
+
+  const copyLink = () => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(projectLink);
+      toast.success("Link proyek berhasil disalin! Anda bisa langsung kirim ke WhatsApp rekan tim.");
+    }
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post(`/projects/${projectId}/invite`, { email, role });
-      toast.success("Undangan terkirim via email (mock)");
+      await api.post(`/projects/${projectId}/invite`, { email, role, project_link: projectLink });
+      toast.success("Undangan berhasil dicatat dan link proyek siap dibagikan!");
       setEmail("");
       onOpenChange(false);
       onInvited();
@@ -631,37 +655,61 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
       setSaving(false);
     }
   };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-card border-border" data-testid="invite-dialog">
+      <DialogContent className="bg-card border-border sm:max-w-md" data-testid="invite-dialog">
         <DialogHeader>
-          <DialogTitle>Undang Personel</DialogTitle>
+          <DialogTitle>Undang Rekan Tim ke Proyek</DialogTitle>
           <DialogDescription>
-            Masukkan email personel. Mereka akan menerima notifikasi dan bisa langsung melihat project ini setelah daftar.
+            Kirim undangan email atau bagikan link proyek langsung ke rekan tim Anda.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 space-y-1.5">
+          <div className="text-xs font-semibold text-indigo-300 flex items-center justify-between">
+            <span>Link Langsung Proyek:</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={copyLink}
+              className="h-6 text-[11px] border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/20"
+            >
+              Salin Link 📋
+            </Button>
+          </div>
+          <div className="text-[11px] text-muted-foreground truncate font-mono select-all">
+            {projectLink}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Rekan tim Anda cukup membuka link ini di browser HP atau laptop mereka untuk melihat proyek.
+          </p>
+        </div>
+
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Email</Label>
+            <Label>Email Personel</Label>
             <Input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="personel@email.com"
+              placeholder="drafter@email.com"
               data-testid="personnel-email-input"
               className="bg-background"
             />
           </div>
           <div className="space-y-2">
-            <Label>Peran</Label>
+            <Label>Peran / Posisi</Label>
             <Select value={role} onValueChange={setRole}>
               <SelectTrigger className="bg-background" data-testid="personnel-role-select">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-card border-border">
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="coordinator">Coordinator</SelectItem>
+                <SelectItem value="drafter">Drafter (Digitasi & Peta)</SelectItem>
+                <SelectItem value="koordinator">Koordinator (Validasi & QC)</SelectItem>
+                <SelectItem value="member">Anggota Tim Umum</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -672,7 +720,7 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
               className="bg-indigo-500 hover:bg-indigo-600 w-full"
               data-testid="send-invite-btn"
             >
-              {saving ? "Mengirim..." : "Kirim Undangan"}
+              {saving ? "Mengirim..." : "Kirim Undangan Proyek"}
             </Button>
           </DialogFooter>
         </form>

@@ -28,7 +28,6 @@ export async function handleSupabaseRequest(method, url, data) {
 
   // Demo Auth
   if (cleanUrl === "auth/demo" && method === "post") {
-    // Check if demo project exists, if not seed it into Supabase
     const { data: existingProjs } = await supabase.from("projects").select("id").limit(1);
     if (!existingProjs || existingProjs.length === 0) {
       await seedSupabaseDemo(currentUserId);
@@ -44,7 +43,17 @@ export async function handleSupabaseRequest(method, url, data) {
     });
   }
 
-  // 2. DASHBOARD
+  // 2. EMAIL LOGS (INBOX)
+  if (cleanUrl === "email-logs" && method === "get") {
+    try {
+      const logs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
+      return ok(Array.isArray(logs) ? logs : []);
+    } catch {
+      return ok([]);
+    }
+  }
+
+  // 3. DASHBOARD
   if (cleanUrl === "dashboard" && method === "get") {
     const { data: projects } = await supabase.from("projects").select("*");
     const { data: tasks } = await supabase.from("tasks").select("*");
@@ -59,17 +68,22 @@ export async function handleSupabaseRequest(method, url, data) {
       stageCounts[s] = (stageCounts[s] || 0) + 1;
     });
 
+    let emailLogs = [];
+    try {
+      emailLogs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
+    } catch {}
+
     return ok({
       total_projects: projs.length,
       owned_projects: projs.filter((p) => p.owner_id === currentUserId).length,
       total_tasks: tsks.length,
       my_tasks: myTasks.length,
       stage_counts: stageCounts,
-      recent_emails: [],
+      recent_emails: Array.isArray(emailLogs) ? emailLogs.slice(0, 10) : [],
     });
   }
 
-  // 3. PROJECTS LIST & CREATE
+  // 4. PROJECTS LIST & CREATE
   if (cleanUrl === "projects" && method === "get") {
     const { data: projects, error } = await supabase
       .from("projects")
@@ -86,9 +100,9 @@ export async function handleSupabaseRequest(method, url, data) {
 
   if (cleanUrl === "projects" && method === "post") {
     const defaultStages = [
-      { name: "Drafter", sla_hours: 24 },
-      { name: "Koordinator", sla_hours: 48 },
-      { name: "Submit BIG", sla_hours: 72 },
+      { name: "Drafter" },
+      { name: "Koordinator" },
+      { name: "Submit BIG" },
     ];
     const newProj = {
       id: "proj-" + Date.now(),
@@ -104,7 +118,7 @@ export async function handleSupabaseRequest(method, url, data) {
     return ok({ ...created, role: "owner" });
   }
 
-  // 4. PROJECT DETAIL /projects/:id
+  // 5. PROJECT DETAIL /projects/:id
   if (parts[0] === "projects" && parts.length === 2) {
     const projId = parts[1];
     if (method === "get") {
@@ -119,7 +133,7 @@ export async function handleSupabaseRequest(method, url, data) {
     }
   }
 
-  // 5. WORKFLOW /projects/:id/workflow
+  // 6. WORKFLOW /projects/:id/workflow
   if (parts[0] === "projects" && parts[2] === "workflow" && method === "put") {
     const projId = parts[1];
     const { error } = await supabase.from("projects").update({ stages: data.stages }).eq("id", projId);
@@ -127,7 +141,7 @@ export async function handleSupabaseRequest(method, url, data) {
     return ok({ message: "Workflow updated", stages: data.stages });
   }
 
-  // 6. TASKS /projects/:id/tasks
+  // 7. TASKS /projects/:id/tasks
   if (parts[0] === "projects" && parts[2] === "tasks") {
     const projId = parts[1];
 
@@ -148,6 +162,7 @@ export async function handleSupabaseRequest(method, url, data) {
         title: data.title,
         description: data.description || "",
         stage: data.stage || "Drafter",
+        sla_days: Number(data.sla_days) || 2,
         stage_entered_at: now,
         assignee: data.assignee || {
           id: currentUserId,
@@ -158,6 +173,23 @@ export async function handleSupabaseRequest(method, url, data) {
       };
       const { data: created, error } = await supabase.from("tasks").insert(newTask).select().single();
       if (error) throw error;
+
+      // Add task assignment notification to inbox
+      try {
+        const projectLink = typeof window !== "undefined" ? `${window.location.origin}/projects/${projId}` : "";
+        const logs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
+        logs.unshift({
+          id: "log-" + Date.now(),
+          to: newTask.assignee.email,
+          subject: `Penugasan Tugas: ${newTask.title}`,
+          kind: "TASK_ASSIGNED",
+          body: `Anda ditugaskan pada "${newTask.title}".\nBatas Waktu (SLA): ${newTask.sla_days} Hari.\n\nKlik link di bawah untuk membuka proyek:\n${projectLink}`,
+          link: projectLink,
+          sent_at: now,
+        });
+        localStorage.setItem("wd_email_logs", JSON.stringify(logs));
+      } catch {}
+
       return ok(created);
     }
 
@@ -183,7 +215,7 @@ export async function handleSupabaseRequest(method, url, data) {
     }
   }
 
-  // 7. MEMBERS /projects/:id/members
+  // 8. MEMBERS /projects/:id/members
   if (parts[0] === "projects" && parts[2] === "members" && method === "get") {
     const projId = parts[1];
     const { data: proj } = await supabase.from("projects").select("owner_id").eq("id", projId).single();
@@ -210,6 +242,23 @@ export async function handleSupabaseRequest(method, url, data) {
     };
     const { data: created, error } = await supabase.from("project_members").insert(newMember).select().single();
     if (error) throw error;
+
+    // Log invite email with direct project link
+    try {
+      const projectLink = data.project_link || (typeof window !== "undefined" ? `${window.location.origin}/projects/${projId}` : "");
+      const logs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
+      logs.unshift({
+        id: "log-" + Date.now(),
+        to: data.email,
+        subject: `Undangan Bergabung ke Proyek`,
+        kind: "INVITE",
+        body: `Anda diundang oleh ${currentUserName} untuk bergabung ke proyek sebagai ${data.role || "drafter"}.\n\nKlik link di bawah ini untuk langsung membuka proyek:\n${projectLink}`,
+        link: projectLink,
+        sent_at: now,
+      });
+      localStorage.setItem("wd_email_logs", JSON.stringify(logs));
+    } catch {}
+
     return ok(created);
   }
 
@@ -221,7 +270,7 @@ export async function handleSupabaseRequest(method, url, data) {
     return ok({ message: "Member removed" });
   }
 
-  // 8. DELIVERABLES /projects/:id/deliverables
+  // 9. DELIVERABLES /projects/:id/deliverables
   if (parts[0] === "projects" && parts[2] === "deliverables" && method === "get") {
     const projId = parts[1];
     const { data: delivs, error } = await supabase
@@ -270,9 +319,9 @@ export async function seedSupabaseDemo(ownerId = "demo-owner") {
     description: "Digitasi batas administrasi, kawasan lindung, dan validasi data spasial ke BIG.",
     drive_folder_url: "https://drive.google.com/drive/folders/sample-spatial-data",
     stages: [
-      { name: "Drafter", sla_hours: 24 },
-      { name: "Koordinator", sla_hours: 48 },
-      { name: "Submit BIG", sla_hours: 72 },
+      { name: "Drafter" },
+      { name: "Koordinator" },
+      { name: "Submit BIG" },
     ],
     owner_id: ownerId,
     created_at: now,
@@ -286,6 +335,7 @@ export async function seedSupabaseDemo(ownerId = "demo-owner") {
       title: "Digitasi Layer Kawasan Hutan Lindung",
       description: "Perbaiki topologi polygon jangan ada overlap.",
       stage: "Drafter",
+      sla_days: 2,
       stage_entered_at: now,
       assignee: { id: ownerId, name: "Surveyor Spasial", email: "surveyor@gis.id" },
       created_at: now,
@@ -296,7 +346,8 @@ export async function seedSupabaseDemo(ownerId = "demo-owner") {
       title: "Koreksi Topologi Jaringan Jalan & Sungai",
       description: "Validasi geometri dengan koordinator sebelum diekspor ke format Geodatabase.",
       stage: "Koordinator",
-      stage_entered_at: new Date(Date.now() - 30 * 3600 * 1000).toISOString(),
+      sla_days: 3,
+      stage_entered_at: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
       assignee: { id: ownerId, name: "Surveyor Spasial", email: "surveyor@gis.id" },
       created_at: now,
     },
@@ -306,6 +357,7 @@ export async function seedSupabaseDemo(ownerId = "demo-owner") {
       title: "Penyusunan Metadata Katalog BIG",
       description: "Upload file SHP dan metadata XML ke portal simojang BIG.",
       stage: "Submit BIG",
+      sla_days: 1,
       stage_entered_at: new Date(Date.now() - 10 * 3600 * 1000).toISOString(),
       assignee: { id: ownerId, name: "Surveyor Spasial", email: "surveyor@gis.id" },
       created_at: now,

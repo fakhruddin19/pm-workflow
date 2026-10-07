@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ChevronRight, Clock, Circle, Timer, AlertTriangle } from "lucide-react";
-import { cn, formatDuration, durationLevel, normalizeStages, hoursSince } from "../lib/utils";
+import { cn, formatDuration, durationLevel, normalizeStages, hoursSince, daysSince } from "../lib/utils";
 
 /**
  * Auto-generated workflow diagram.
@@ -29,6 +29,7 @@ export default function WorkflowDiagram({ stages = [], tasks = [], onTaskClick }
     tasks: tasks.filter((t) => t.stage === stage.name),
   }));
   const totalBreaches = tasks.reduce((acc, t) => {
+    if (t.sla_days && daysSince(t.stage_entered_at || t.created_at) >= t.sla_days) return acc + 1;
     const s = normalized.find((x) => x.name === t.stage);
     if (s?.sla_hours && hoursSince(t.stage_entered_at) >= s.sla_hours) return acc + 1;
     return acc;
@@ -74,9 +75,11 @@ export default function WorkflowDiagram({ stages = [], tasks = [], onTaskClick }
           {stageData.map((sd, idx) => {
             const isLast = idx === stageData.length - 1;
             const hasTasks = sd.tasks.length > 0;
-            const breachCount = sd.tasks.filter(
-              (t) => sd.stage.sla_hours && hoursSince(t.stage_entered_at) >= sd.stage.sla_hours
-            ).length;
+            const breachCount = sd.tasks.filter((t) => {
+              if (t.sla_days) return daysSince(t.stage_entered_at || t.created_at) >= t.sla_days;
+              if (sd.stage.sla_hours) return hoursSince(t.stage_entered_at) >= sd.stage.sla_hours;
+              return false;
+            }).length;
             const stageBorder = breachCount > 0
               ? "border-rose-500/50 shadow-lg shadow-rose-500/10"
               : hasTasks
@@ -136,7 +139,9 @@ export default function WorkflowDiagram({ stages = [], tasks = [], onTaskClick }
                       </div>
                     ) : (
                       sd.tasks.map((t) => {
-                        const level = durationLevel(t.stage_entered_at, sd.stage.sla_hours);
+                        const level = t.sla_days
+                          ? durationLevel(t.stage_entered_at || t.created_at, t.sla_days)
+                          : durationLevel(t.stage_entered_at, sd.stage.sla_hours);
                         const breached = level === "danger";
                         return (
                           <button

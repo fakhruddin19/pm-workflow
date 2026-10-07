@@ -25,12 +25,11 @@ export default function Projects() {
   const [description, setDescription] = useState("");
   const [driveFolderUrl, setDriveFolderUrl] = useState("");
   const [stages, setStages] = useState([
-    { name: "Drafter", sla_hours: 24 },
-    { name: "Koordinator", sla_hours: 48 },
-    { name: "Submit BIG", sla_hours: 72 },
+    { name: "Drafter" },
+    { name: "Koordinator" },
+    { name: "Submit BIG" },
   ]);
   const [newStage, setNewStage] = useState("");
-  const [newSla, setNewSla] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = () => api.get("/projects").then((r) => setProjects(r.data));
@@ -41,10 +40,8 @@ export default function Projects() {
   const addStage = () => {
     const s = newStage.trim();
     if (!s) return;
-    const sla = newSla.trim() ? Number(newSla) : null;
-    setStages((prev) => [...prev, { name: s, sla_hours: Number.isFinite(sla) && sla > 0 ? sla : null }]);
+    setStages((prev) => [...prev, { name: s }]);
     setNewStage("");
-    setNewSla("");
   };
 
   const removeStage = (i) => setStages((prev) => prev.filter((_, idx) => idx !== i));
@@ -69,9 +66,9 @@ export default function Projects() {
       setDescription("");
       setDriveFolderUrl("");
       setStages([
-        { name: "Drafter", sla_hours: 24 },
-        { name: "Koordinator", sla_hours: 48 },
-        { name: "Submit BIG", sla_hours: 72 },
+        { name: "Drafter" },
+        { name: "Koordinator" },
+        { name: "Submit BIG" },
       ]);
       load();
     } catch (err) {
@@ -138,20 +135,19 @@ export default function Projects() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label>Workflow Stages + SLA (jam)</Label>
+                <Label>Tahapan Alur Kerja (Workflow Stages)</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Urutan proses pekerjaan proyek. Batas waktu SLA akan diatur fleksibel saat pembagian tugas ke personel.
+                </p>
                 <div className="flex flex-col gap-2 min-h-[2rem]">
                   {stages.map((s, i) => (
                     <div
                       key={`${s.name}-${i}`}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-sm"
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-sm"
                       data-testid={`workflow-stage-chip-${i}`}
                     >
-                      <span className="text-indigo-200 flex-1">
-                        {i + 1}. {s.name}
-                      </span>
-                      <span className="flex items-center gap-1 text-[10px] text-indigo-300 font-mono">
-                        <Timer className="h-3 w-3" />
-                        {s.sla_hours ? `${s.sla_hours}j` : "—"}
+                      <span className="text-indigo-200 flex-1 font-medium">
+                        Tahap {i + 1}: {s.name}
                       </span>
                       <button
                         type="button"
@@ -159,7 +155,7 @@ export default function Projects() {
                         className="text-indigo-300/60 hover:text-rose-400"
                         data-testid={`remove-stage-${i}`}
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   ))}
@@ -168,7 +164,7 @@ export default function Projects() {
                   <Input
                     value={newStage}
                     onChange={(e) => setNewStage(e.target.value)}
-                    placeholder="Nama stage"
+                    placeholder="Nama tahapan baru (misal: Quality Control)"
                     data-testid="new-stage-input"
                     className="bg-background flex-1"
                     onKeyDown={(e) => {
@@ -178,18 +174,8 @@ export default function Projects() {
                       }
                     }}
                   />
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={newSla}
-                    onChange={(e) => setNewSla(e.target.value)}
-                    placeholder="SLA jam"
-                    data-testid="new-stage-sla-input"
-                    className="bg-background w-28"
-                  />
                   <Button type="button" variant="outline" onClick={addStage} data-testid="add-workflow-stage-btn">
-                    Tambah
+                    Tambah Tahap
                   </Button>
                 </div>
               </div>
