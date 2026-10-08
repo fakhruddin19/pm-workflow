@@ -320,18 +320,21 @@ export async function handleLocalRequest(method, url, data) {
     }
 
     if (parts.length === 3 && method === "post") {
+      const taskSlaDays = Math.max(1, Number(data.sla_days) || 2);
       const newTask = {
         id: "task-" + Date.now(),
         project_id: projId,
         title: data.title,
         description: data.description || "",
         stage: data.stage || "Drafter",
+        sla_days: taskSlaDays,
         stage_entered_at: now,
-        assignee: data.assignee || {
-          id: currentUser?.id || "usr-1",
-          name: currentUser?.name || "Surveyor",
-          email: currentUser?.email || "surveyor@gis.id",
-        },
+        assignee: data.assignee || (data.assignee_id && data.assignee_id !== "none" ? {
+          id: data.assignee_id,
+          name: "Personel",
+          email: "",
+          sla_days: taskSlaDays,
+        } : null),
         created_at: now,
       };
       tasks.push(newTask);

@@ -113,6 +113,7 @@ export async function handleSupabaseRequest(method, url, data) {
       (allTasks || []).forEach((t) => {
         const assigneeEmail = (t.assignee?.email || "").toLowerCase();
         const isAssignee = assigneeEmail === emailLower || t.assignee?.id === currentUserId;
+        const taskSla = t.sla_days || t.assignee?.sla_days;
         if (isAssignee) {
           const p = projectsMap[t.project_id];
           inboxItems.push({
@@ -121,7 +122,7 @@ export async function handleSupabaseRequest(method, url, data) {
             kind: "TUGAS",
             sent_at: t.created_at,
             to: currentUserEmail,
-            body: `Anda ditugaskan mengerjakan "${t.title}" pada proyek "${p?.name || "Proyek"}".\nTahap: ${t.stage || "Drafter"}.${t.sla_days ? `\nSLA: ${t.sla_days} Hari.` : ""}`,
+            body: `Anda ditugaskan mengerjakan "${t.title}" pada proyek "${p?.name || "Proyek"}".\nTahap: ${t.stage || "Drafter"}.${taskSla ? `\nSLA: ${taskSla} Hari.` : ""}`,
             link: `/projects/${t.project_id}`,
             project_id: t.project_id,
           });
@@ -338,45 +339,86 @@ export async function handleSupabaseRequest(method, url, data) {
         .eq("project_id", projId)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return ok(tasks || []);
+      const formattedTasks = (tasks || []).map((t) => ({
+        ...t,
+        sla_days: t.sla_days ?? t.assignee?.sla_days ?? 2,
+      }));
+      return ok(formattedTasks);
     }
 
     if (parts.length === 3 && method === "post") {
+      const taskSlaDays = Math.max(1, Number(data.sla_days) || 2);
+      let assigneeObj = null;
+
+      if (data.assignee && (data.assignee.id || data.assignee.email || data.assignee.name)) {
+        assigneeObj = {
+          id: data.assignee.id || null,
+          name: data.assignee.name || "",
+          email: data.assignee.email || "",
+          sla_days: taskSlaDays,
+        };
+      } else if (data.assignee_id && data.assignee_id !== "none") {
+        const { data: member } = await supabase
+          .from("project_members")
+          .select("*")
+          .eq("project_id", projId)
+          .or(`user_id.eq.${data.assignee_id},id.eq.${data.assignee_id}`)
+          .maybeSingle();
+
+        if (member) {
+          assigneeObj = {
+            id: member.user_id || member.id,
+            name: member.name || member.email?.split("@")[0] || "Anggota Tim",
+            email: member.email,
+            sla_days: taskSlaDays,
+          };
+        }
+      }
+
+      const finalAssignee = assigneeObj || {
+        id: null,
+        name: null,
+        email: null,
+        sla_days: taskSlaDays,
+      };
+
       const newTask = {
         id: "task-" + Date.now(),
         project_id: projId,
         title: data.title,
         description: data.description || "",
         stage: data.stage || "Drafter",
-        sla_days: Number(data.sla_days) || 2,
         stage_entered_at: now,
-        assignee: data.assignee || {
-          id: currentUserId,
-          name: currentUserName,
-          email: currentUserEmail,
-        },
+        assignee: finalAssignee,
         created_at: now,
       };
       const { data: created, error } = await supabase.from("tasks").insert(newTask).select().single();
       if (error) throw error;
 
-      // Add task assignment notification to inbox
-      try {
-        const projectLink = typeof window !== "undefined" ? `${window.location.origin}/projects/${projId}` : "";
-        const logs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
-        logs.unshift({
-          id: "log-" + Date.now(),
-          to: newTask.assignee.email,
-          subject: `Penugasan Tugas: ${newTask.title}`,
-          kind: "TASK_ASSIGNED",
-          body: `Anda ditugaskan pada "${newTask.title}".\nBatas Waktu (SLA): ${newTask.sla_days} Hari.\n\nKlik link di bawah untuk membuka proyek:\n${projectLink}`,
-          link: projectLink,
-          sent_at: now,
-        });
-        localStorage.setItem("wd_email_logs", JSON.stringify(logs));
-      } catch {}
+      const resultTask = {
+        ...created,
+        sla_days: taskSlaDays,
+      };
 
-      return ok(created);
+      // Add task assignment notification to inbox
+      if (assigneeObj?.email) {
+        try {
+          const projectLink = typeof window !== "undefined" ? `${window.location.origin}/projects/${projId}` : "";
+          const logs = JSON.parse(localStorage.getItem("wd_email_logs") || "[]");
+          logs.unshift({
+            id: "log-" + Date.now(),
+            to: assigneeObj.email,
+            subject: `Penugasan Tugas: ${newTask.title}`,
+            kind: "TASK_ASSIGNED",
+            body: `Anda ditugaskan pada "${newTask.title}".\nBatas Waktu (SLA): ${taskSlaDays} Hari.\n\nKlik link di bawah untuk membuka proyek:\n${projectLink}`,
+            link: projectLink,
+            sent_at: now,
+          });
+          localStorage.setItem("wd_email_logs", JSON.stringify(logs));
+        } catch {}
+      }
+
+      return ok(resultTask);
     }
 
     // Move task: /projects/:id/tasks/:taskId/move

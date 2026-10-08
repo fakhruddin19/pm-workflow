@@ -414,17 +414,17 @@ export default function ProjectDetail() {
                           variant="outline"
                           className={cn(
                             "border-border",
-                            m.status === "accepted"
-                              ? "text-emerald-300 border-emerald-500/30"
-                              : "text-amber-300 border-amber-500/30"
+                            m.status === "pending"
+                              ? "text-amber-300 border-amber-500/30"
+                              : "text-emerald-300 border-emerald-500/30"
                           )}
                         >
-                          {m.status === "accepted" ? (
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                          ) : (
+                          {m.status === "pending" ? (
                             <Clock className="h-3 w-3 mr-1" />
+                          ) : (
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
                           )}
-                          {m.status}
+                          {m.status === "pending" ? "Menunggu" : "Aktif"}
                         </Badge>
                         <span className="text-xs text-muted-foreground mr-1">{m.role}</span>
                         {isOwner && (
@@ -516,21 +516,67 @@ function TaskCreateDialog({ open, onOpenChange, projectId, stages, members, onCr
     if (names[0]) setStage(names[0]);
   }, [stages, names]);
 
-  const availableAssignees = [
-    ...(members.owner ? [{ id: members.owner.id, name: members.owner.name, email: members.owner.email }] : []),
-    ...members.members
-      .filter((m) => m.status === "accepted" && m.user)
-      .map((m) => ({ id: m.user.id, name: m.user.name, email: m.user.email })),
-  ];
+  // Build complete list of all assignees: owner + all invited/accepted project members
+  const memberList = Array.isArray(members?.members)
+    ? members.members
+    : Array.isArray(members)
+    ? members
+    : [];
+  const owner = members?.owner;
+
+  const availableAssignees = [];
+
+  if (owner) {
+    const ownerName = owner.name || owner.email?.split("@")[0] || "Project Owner";
+    availableAssignees.push({
+      id: owner.id || owner.user_id,
+      name: `${ownerName} (Owner)`,
+      displayName: ownerName,
+      email: owner.email,
+    });
+  }
+
+  memberList.forEach((m) => {
+    const mId = m.user_id || m.user?.id || m.id;
+    const mName = m.user?.name || m.name || m.email?.split("@")[0] || "Anggota Tim";
+    const mEmail = m.user?.email || m.email || "";
+    const mRole = m.role ? ` (${m.role})` : "";
+
+    // Skip duplicate if owner is also in memberList
+    if (owner && (mId === (owner.id || owner.user_id) || (mEmail && mEmail.toLowerCase() === owner.email?.toLowerCase()))) {
+      return;
+    }
+
+    availableAssignees.push({
+      id: mId,
+      name: `${mName}${mRole}`,
+      displayName: mName,
+      email: mEmail,
+    });
+  });
 
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
+      const selected = availableAssignees.find((a) => a.id === assigneeId);
+      const assigneeObj = selected && assigneeId !== "none" ? {
+        id: selected.id,
+        name: selected.displayName || selected.name,
+        email: selected.email,
+        sla_days: Math.max(1, Number(slaDays) || 1),
+      } : {
+        id: null,
+        name: null,
+        email: null,
+        sla_days: Math.max(1, Number(slaDays) || 1),
+      };
+
       await api.post(`/projects/${projectId}/tasks`, {
         title,
         description,
         assignee_id: assigneeId === "none" ? null : assigneeId,
+        assignee: assigneeObj,
         stage,
         sla_days: Math.max(1, Number(slaDays) || 1),
       });
