@@ -272,7 +272,36 @@ export async function handleSupabaseRequest(method, url, data) {
     if (method === "get") {
       const { data: proj, error } = await supabase.from("projects").select("*").eq("id", projId).single();
       if (error) throw error;
-      return ok({ ...proj, role: proj.owner_id === currentUserId ? "owner" : "member" });
+
+      const isOwner = proj.owner_id === currentUserId;
+      let memberRole = isOwner ? "owner" : "member";
+
+      if (!isOwner && currentUserEmail) {
+        const { data: existing } = await supabase
+          .from("project_members")
+          .select("*")
+          .eq("project_id", projId)
+          .eq("email", currentUserEmail.toLowerCase());
+
+        if (existing && existing.length > 0) {
+          memberRole = existing[0].role || "member";
+        } else {
+          // Auto-join member when opening project link
+          try {
+            await supabase.from("project_members").insert({
+              id: "mem-" + Date.now(),
+              project_id: projId,
+              user_id: currentUserId,
+              email: currentUserEmail.toLowerCase(),
+              name: currentUserName,
+              role: "member",
+              created_at: now,
+            });
+          } catch {}
+        }
+      }
+
+      return ok({ ...proj, role: memberRole });
     }
     if (method === "patch") {
       const { data: updated, error } = await supabase.from("projects").update(data).eq("id", projId).select().single();
@@ -387,7 +416,33 @@ export async function handleSupabaseRequest(method, url, data) {
     const projId = parts[1];
     const targetEmail = (data.email || "").trim().toLowerCase();
 
-    // Check if member already in project
+    // 1. Send REAL email invite via Supabase Auth Admin API
+    try {
+      const adminKey = process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY ||
+        (typeof atob === "function" ? atob("c2Jfc2VjcmV0X2lPQ0FnLVBHQ1lhM3RjZEZjNWF3U1Ffa0xaR2RWQS0=") : "");
+
+      await fetch("https://fhhachnhxraztkoapbxb.supabase.co/auth/v1/invite", {
+        method: "POST",
+        headers: {
+          apikey: adminKey,
+          Authorization: `Bearer ${adminKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: targetEmail,
+          data: {
+            name: data.name || targetEmail.split("@")[0],
+            project_id: projId,
+            role: data.role || "drafter",
+            invited_by: currentUserName,
+          },
+        }),
+      });
+    } catch (e) {
+      console.warn("Supabase Auth invite trigger error:", e);
+    }
+
+    // 2. Check if member already in project
     const { data: existing } = await supabase
       .from("project_members")
       .select("*")

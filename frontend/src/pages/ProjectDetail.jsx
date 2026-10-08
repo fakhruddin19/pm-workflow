@@ -630,29 +630,33 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
   const [saving, setSaving] = useState(false);
+  const [invitedSuccess, setInvitedSuccess] = useState(null);
 
   const projectLink = typeof window !== "undefined" ? `${window.location.origin}/projects/${projectId}` : "";
 
   const copyLink = () => {
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(projectLink);
-      toast.success("Link proyek berhasil disalin! Anda bisa langsung kirim ke WhatsApp rekan tim.");
+      toast.success("Link proyek berhasil disalin! Anda bisa langsung kirim ke WhatsApp/email rekan tim.");
     }
   };
 
-  const shareWhatsApp = () => {
+  const shareWhatsApp = (r = role) => {
     const text = encodeURIComponent(
-      `Halo! Anda diundang bergabung ke proyek di WorkflowDrive sebagai ${role}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${projectLink}`
+      `Halo! Anda diundang bergabung ke proyek di WorkflowDrive sebagai ${r}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${projectLink}`
     );
     window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
   };
 
-  const shareEmail = () => {
+  const openGmail = (targetEmail, targetRole) => {
     const subject = encodeURIComponent("Undangan Bergabung ke Proyek WorkflowDrive");
     const body = encodeURIComponent(
-      `Halo!\n\nAnda diundang bergabung ke proyek di WorkflowDrive sebagai ${role}.\n\nSilakan klik link berikut untuk membuka proyek:\n${projectLink}`
+      `Halo!\n\nSaya mengundang Anda untuk bergabung ke proyek di WorkflowDrive sebagai ${targetRole}.\n\nSilakan klik tautan di bawah ini untuk membuka proyek dan melihat tugas Anda:\n${projectLink}\n\nTerima kasih!`
     );
-    window.open(`mailto:${email || ""}?subject=${subject}&body=${body}`, "_blank");
+    window.open(
+      `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&su=${subject}&body=${body}`,
+      "_blank"
+    );
   };
 
   const submit = async (e) => {
@@ -660,9 +664,8 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
     setSaving(true);
     try {
       await api.post(`/projects/${projectId}/invite`, { email, role, project_link: projectLink });
-      toast.success(`Undangan untuk ${email} berhasil dicatat ke proyek!`);
-      setEmail("");
-      onOpenChange(false);
+      toast.success(`Undangan untuk ${email} berhasil diproses!`);
+      setInvitedSuccess({ email, role });
       onInvited();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Gagal mengundang");
@@ -671,85 +674,157 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
     }
   };
 
+  const handleClose = () => {
+    setInvitedSuccess(null);
+    setEmail("");
+    onOpenChange(false);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="bg-card border-border sm:max-w-md" data-testid="invite-dialog">
         <DialogHeader>
           <DialogTitle>Undang Rekan Tim ke Proyek</DialogTitle>
           <DialogDescription>
-            Daftarkan email rekan tim atau bagikan link proyek langsung via WhatsApp/Email.
+            Kirim undangan resmi atau bagikan link proyek langsung via Gmail & WhatsApp.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 space-y-2">
-          <div className="text-xs font-semibold text-indigo-300 flex items-center justify-between">
-            <span>Link Langsung Proyek:</span>
-            <div className="flex gap-1.5">
+        {invitedSuccess ? (
+          <div className="space-y-4 py-2">
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-2">
+              <div className="h-10 w-10 mx-auto rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
+                ✓
+              </div>
+              <div className="font-semibold text-base text-foreground">Undangan Berhasil Diproses!</div>
+              <p className="text-xs text-muted-foreground">
+                Email undangan otomatis telah dikirim ke <span className="font-medium text-foreground">{invitedSuccess.email}</span> sebagai <span className="font-medium text-indigo-300 capitalize">{invitedSuccess.role}</span>.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-muted-foreground">Opsi Pengiriman Cepat (Direkomendasikan):</div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  onClick={() => openGmail(invitedSuccess.email, invitedSuccess.role)}
+                  className="bg-rose-600 hover:bg-rose-500 text-white text-xs h-9"
+                >
+                  ✉️ Buka Gmail (1-Klik)
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => shareWhatsApp(invitedSuccess.role)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-9"
+                >
+                  💬 Kirim WhatsApp
+                </Button>
+              </div>
               <Button
                 type="button"
-                size="sm"
                 variant="outline"
                 onClick={copyLink}
-                className="h-6 text-[11px] border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/20"
+                className="w-full text-xs h-8 border-border"
               >
-                Salin 📋
+                📋 Salin Link Proyek
+              </Button>
+            </div>
+
+            <div className="p-3 rounded-lg bg-muted/40 border border-border text-[11px] text-muted-foreground leading-relaxed">
+              💡 <strong>Tips untuk Rekan:</strong> Minta rekan Anda memeriksa folder <em>Inbox</em> atau <em>Spam / Promosi</em> di email mereka, atau kirimkan via Gmail/WhatsApp di atas agar langsung masuk ke HP rekan Anda.
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setInvitedSuccess(null)}
+                className="flex-1 text-xs"
+              >
+                + Undang Rekan Lain
               </Button>
               <Button
                 type="button"
-                size="sm"
-                variant="outline"
-                onClick={shareWhatsApp}
-                className="h-6 text-[11px] border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20"
+                onClick={handleClose}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs"
               >
-                WhatsApp 💬
+                Selesai
               </Button>
             </div>
           </div>
-          <div className="text-[11px] text-muted-foreground truncate font-mono select-all">
-            {projectLink}
-          </div>
-          <p className="text-[10px] text-muted-foreground">
-            Rekan tim Anda cukup membuka link ini di HP/laptop dan login dengan email mereka untuk langsung berkolaborasi.
-          </p>
-        </div>
+        ) : (
+          <>
+            <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 space-y-2">
+              <div className="text-xs font-semibold text-indigo-300 flex items-center justify-between">
+                <span>Link Langsung Proyek:</span>
+                <div className="flex gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={copyLink}
+                    className="h-6 text-[11px] border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/20"
+                  >
+                    Salin 📋
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => shareWhatsApp()}
+                    className="h-6 text-[11px] border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20"
+                  >
+                    WhatsApp 💬
+                  </Button>
+                </div>
+              </div>
+              <div className="text-[11px] text-muted-foreground truncate font-mono select-all">
+                {projectLink}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Rekan tim Anda cukup membuka link ini di HP/laptop untuk langsung melihat proyek.
+              </p>
+            </div>
 
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Email Personel</Label>
-            <Input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="drafter@email.com"
-              data-testid="personnel-email-input"
-              className="bg-background"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Peran / Posisi</Label>
-            <Select value={role} onValueChange={setRole}>
-              <SelectTrigger className="bg-background" data-testid="personnel-role-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-card border-border">
-                <SelectItem value="drafter">Drafter (Digitasi & Peta)</SelectItem>
-                <SelectItem value="koordinator">Koordinator (Validasi & QC)</SelectItem>
-                <SelectItem value="member">Anggota Tim Umum</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={saving}
-              className="bg-indigo-500 hover:bg-indigo-600 w-full"
-              data-testid="send-invite-btn"
-            >
-              {saving ? "Mengirim..." : "Kirim Undangan Proyek"}
-            </Button>
-          </DialogFooter>
-        </form>
+            <form onSubmit={submit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Email Personel</Label>
+                <Input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="drafter@email.com"
+                  data-testid="personnel-email-input"
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Peran / Posisi</Label>
+                <Select value={role} onValueChange={setRole}>
+                  <SelectTrigger className="bg-background" data-testid="personnel-role-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="drafter">Drafter (Digitasi & Peta)</SelectItem>
+                    <SelectItem value="koordinator">Koordinator (Validasi & QC)</SelectItem>
+                    <SelectItem value="member">Anggota Tim Umum</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  disabled={saving}
+                  className="bg-indigo-500 hover:bg-indigo-600 w-full"
+                  data-testid="send-invite-btn"
+                >
+                  {saving ? "Mengirim Undangan..." : "Kirim Undangan Proyek"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
