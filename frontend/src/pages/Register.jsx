@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -14,6 +14,7 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { register } = useAuth();
 
   const onSubmit = async (e) => {
@@ -26,7 +27,8 @@ export default function Register() {
     try {
       await register(email, password, name);
       toast.success("Akun berhasil dibuat");
-      navigate("/dashboard", { replace: true });
+      const dest = location.state?.from?.pathname || "/dashboard";
+      navigate(dest, { replace: true });
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Pendaftaran gagal");
     } finally {
@@ -99,7 +101,7 @@ export default function Register() {
             </Button>
             <p className="text-sm text-muted-foreground text-center">
               Sudah punya akun?{" "}
-              <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-medium" data-testid="go-to-login-link">
+              <Link to="/login" state={{ from: location.state?.from }} className="text-indigo-400 hover:text-indigo-300 font-medium" data-testid="go-to-login-link">
                 Masuk
               </Link>
             </p>

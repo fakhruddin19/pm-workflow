@@ -119,7 +119,7 @@ export default function Login() {
             </Button>
             <p className="text-sm text-muted-foreground text-center">
               Belum punya akun?{" "}
-              <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium" data-testid="go-to-register-link">
+              <Link to="/register" state={{ from: location.state?.from }} className="text-indigo-400 hover:text-indigo-300 font-medium" data-testid="go-to-register-link">
                 Daftar
               </Link>
             </p>
