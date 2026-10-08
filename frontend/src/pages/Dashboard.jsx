@@ -80,7 +80,7 @@ export default function Dashboard() {
 
         <Card className="bg-card border-border" data-testid="recent-emails-card">
           <CardHeader>
-            <CardTitle className="text-base">Email Terkini (Mock)</CardTitle>
+            <CardTitle className="text-base">Notifikasi & Aktivitas Email</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {(data?.recent_emails || []).length === 0 ? (

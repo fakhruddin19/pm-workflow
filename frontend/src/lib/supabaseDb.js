@@ -16,9 +16,9 @@ export async function handleSupabaseRequest(method, url, data) {
     localUser = JSON.parse(localStorage.getItem("wd_user"));
   } catch {}
 
-  const currentUserId = sessionUser?.id || (localUser?.email !== "user@gis.id" ? localUser?.id : null) || null;
-  const currentUserName = sessionUser?.user_metadata?.name || sessionUser?.email?.split("@")[0] || (localUser?.email !== "user@gis.id" ? localUser?.name : "") || "";
-  const rawEmail = sessionUser?.email || (localUser?.email !== "user@gis.id" ? localUser?.email : "") || "";
+  const currentUserId = sessionUser?.id || localUser?.id || null;
+  const currentUserName = sessionUser?.user_metadata?.name || sessionUser?.email?.split("@")[0] || localUser?.name || "";
+  const rawEmail = sessionUser?.email || localUser?.email || "";
   const currentUserEmail = rawEmail.trim().toLowerCase();
 
   const ok = (resData) => ({ data: resData, status: 200, statusText: "OK" });
@@ -40,18 +40,15 @@ export async function handleSupabaseRequest(method, url, data) {
 
   // Demo Auth
   if (cleanUrl === "auth/demo" && method === "post") {
-    const { data: existingProjs } = await supabase.from("projects").select("id").limit(1);
-    if (!existingProjs || existingProjs.length === 0) {
-      await seedSupabaseDemo(currentUserId);
-    }
+    const demoUser = {
+      id: currentUserId || "demo-user-" + Date.now(),
+      email: currentUserEmail || "demo@workflow.app",
+      name: currentUserName || "Demo User",
+      created_at: now,
+    };
     return ok({
-      token: "demo-token",
-      user: {
-        id: currentUserId,
-        email: currentUserEmail,
-        name: currentUserName,
-        created_at: now,
-      },
+      token: "demo-token-" + Date.now(),
+      user: demoUser,
     });
   }
 
@@ -536,59 +533,3 @@ export async function handleSupabaseRequest(method, url, data) {
   return ok({ success: true, timestamp: now });
 }
 
-// Seed initial sample project into Supabase if empty
-export async function seedSupabaseDemo(ownerId = "demo-owner") {
-  const now = new Date().toISOString();
-  const projId = "demo-project-001";
-  const demoProj = {
-    id: projId,
-    name: "Peta Tematik RTRW Kab. Bangkalan",
-    description: "Digitasi batas administrasi, kawasan lindung, dan validasi data spasial ke BIG.",
-    drive_folder_url: "https://drive.google.com/drive/folders/sample-spatial-data",
-    stages: [
-      { name: "Drafter" },
-      { name: "Koordinator" },
-      { name: "Submit BIG" },
-    ],
-    owner_id: ownerId,
-    created_at: now,
-  };
-  await supabase.from("projects").upsert(demoProj);
-
-  const demoTasks = [
-    {
-      id: "task-001",
-      project_id: projId,
-      title: "Digitasi Layer Kawasan Hutan Lindung",
-      description: "Perbaiki topologi polygon jangan ada overlap.",
-      stage: "Drafter",
-      sla_days: 2,
-      stage_entered_at: now,
-      assignee: { id: ownerId, name: "Surveyor Spasial", email: "surveyor@gis.id" },
-      created_at: now,
-    },
-    {
-      id: "task-002",
-      project_id: projId,
-      title: "Koreksi Topologi Jaringan Jalan & Sungai",
-      description: "Validasi geometri dengan koordinator sebelum diekspor ke format Geodatabase.",
-      stage: "Koordinator",
-      sla_days: 3,
-      stage_entered_at: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
-      assignee: { id: ownerId, name: "Surveyor Spasial", email: "surveyor@gis.id" },
-      created_at: now,
-    },
-    {
-      id: "task-003",
-      project_id: projId,
-      title: "Penyusunan Metadata Katalog BIG",
-      description: "Upload file SHP dan metadata XML ke portal simojang BIG.",
-      stage: "Submit BIG",
-      sla_days: 1,
-      stage_entered_at: new Date(Date.now() - 10 * 3600 * 1000).toISOString(),
-      assignee: { id: ownerId, name: "Surveyor Spasial", email: "surveyor@gis.id" },
-      created_at: now,
-    },
-  ];
-  await supabase.from("tasks").upsert(demoTasks);
-}

@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../components/ui/dialog";
-import { Plus, FolderKanban, HardDrive, X, Timer } from "lucide-react";
+import { Plus, FolderKanban, HardDrive, X } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Projects() {
@@ -131,7 +131,7 @@ export default function Projects() {
                   className="bg-background"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  (Mocked) Link ini akan tampil di halaman project. Integrasi upload real menyusul.
+                  Folder Google Drive yang disediakan untuk anggota tim mengunggah file deliverable.
                 </p>
               </div>
               <div className="space-y-2">

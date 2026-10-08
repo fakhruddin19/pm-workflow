@@ -38,6 +38,7 @@ import {
   X,
   Clock,
   CheckCircle2,
+  UserMinus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDuration, durationLevel, getSlaInfo, initials, normalizeStages, stageNames } from "../lib/utils";
@@ -425,18 +426,31 @@ export default function ProjectDetail() {
                           )}
                           {m.status}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">{m.role}</span>
-                        <button
-                          onClick={async () => {
-                            await api.delete(`/projects/${id}/members/${m.id}`);
-                            toast.success("Personel dihapus");
-                            loadAll();
-                          }}
-                          className="text-muted-foreground hover:text-rose-400"
-                          data-testid={`remove-member-${m.id}`}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        <span className="text-xs text-muted-foreground mr-1">{m.role}</span>
+                        {isOwner && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              const confirmRemove = window.confirm(
+                                `Apakah Anda yakin ingin menghapus ${m.user?.name || m.name || m.email} dari tim proyek ini?`
+                              );
+                              if (!confirmRemove) return;
+                              try {
+                                await api.delete(`/projects/${id}/members/${m.id}`);
+                                toast.success("Personel berhasil dihapus dari proyek");
+                                loadAll();
+                              } catch (err) {
+                                toast.error("Gagal menghapus personel: " + (err.response?.data?.detail || err.message));
+                              }
+                            }}
+                            className="h-7 px-2.5 text-xs text-rose-300 border-rose-500/30 hover:bg-rose-950/40 hover:text-rose-200 hover:border-rose-500/50"
+                            data-testid={`remove-member-${m.id}`}
+                          >
+                            <UserMinus className="h-3.5 w-3.5 mr-1 text-rose-400" />
+                            Remove
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
