@@ -32,17 +32,19 @@ export function AuthProvider({ children }) {
       supabase.auth.getSession().then(({ data }) => {
         if (data?.session) {
           fetchMe();
-        } else if (getToken()) {
-          // Legacy demo-login token present — use it.
-          fetchMe();
         } else {
+          clearAuth();
           setUser(null);
           setLoading(false);
         }
       });
       const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
-        if (session) fetchMe();
-        else if (!getToken()) setUser(null);
+        if (session) {
+          fetchMe();
+        } else {
+          clearAuth();
+          setUser(null);
+        }
       });
       return () => {
         mounted = false;

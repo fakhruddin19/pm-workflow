@@ -633,25 +633,29 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
   const [invitedSuccess, setInvitedSuccess] = useState(null);
 
   const projectLink = typeof window !== "undefined" ? `${window.location.origin}/projects/${projectId}` : "";
+  const directInviteLink = (targetEmail) => targetEmail ? `${projectLink}?invite=${encodeURIComponent(targetEmail)}` : projectLink;
 
-  const copyLink = () => {
+  const copyLink = (targetEmail = email) => {
+    const link = directInviteLink(targetEmail);
     if (navigator?.clipboard) {
-      navigator.clipboard.writeText(projectLink);
+      navigator.clipboard.writeText(link);
       toast.success("Link proyek berhasil disalin! Anda bisa langsung kirim ke WhatsApp/email rekan tim.");
     }
   };
 
-  const shareWhatsApp = (r = role) => {
+  const shareWhatsApp = (r = role, targetEmail = email) => {
+    const link = directInviteLink(targetEmail);
     const text = encodeURIComponent(
-      `Halo! Anda diundang bergabung ke proyek di WorkflowDrive sebagai ${r}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${projectLink}`
+      `Halo! Anda diundang bergabung ke proyek di WorkflowDrive sebagai ${r}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${link}`
     );
     window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
   };
 
   const openGmail = (targetEmail, targetRole) => {
+    const link = directInviteLink(targetEmail);
     const subject = encodeURIComponent("Undangan Bergabung ke Proyek WorkflowDrive");
     const body = encodeURIComponent(
-      `Halo!\n\nSaya mengundang Anda untuk bergabung ke proyek di WorkflowDrive sebagai ${targetRole}.\n\nSilakan klik tautan di bawah ini untuk membuka proyek dan melihat tugas Anda:\n${projectLink}\n\nTerima kasih!`
+      `Halo!\n\nSaya mengundang Anda untuk bergabung ke proyek di WorkflowDrive sebagai ${targetRole}.\n\nSilakan klik tautan di bawah ini untuk membuka proyek dan melihat tugas Anda:\n${link}\n\nTerima kasih!`
     );
     window.open(
       `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&su=${subject}&body=${body}`,

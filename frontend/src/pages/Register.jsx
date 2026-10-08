@@ -9,13 +9,17 @@ import { toast } from "sonner";
 import { HardDrive } from "lucide-react";
 
 export default function Register() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { register } = useAuth();
+
+  const searchParams = new URLSearchParams(location.search || location.state?.from?.search || "");
+  const inviteEmail = searchParams.get("invite") || searchParams.get("email") || "";
+
+  const [name, setName] = useState(inviteEmail ? inviteEmail.split("@")[0] : "");
+  const [email, setEmail] = useState(inviteEmail);
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -27,7 +31,7 @@ export default function Register() {
     try {
       await register(email, password, name);
       toast.success("Akun berhasil dibuat");
-      const dest = location.state?.from?.pathname || "/dashboard";
+      const dest = (location.state?.from?.pathname || "/dashboard") + (location.state?.from?.search || "");
       navigate(dest, { replace: true });
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Pendaftaran gagal");

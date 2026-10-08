@@ -10,18 +10,30 @@ export async function handleSupabaseRequest(method, url, data) {
   // Get current user session
   const { data: sessionData } = await supabase.auth.getSession();
   const sessionUser = sessionData?.session?.user;
-  const currentUserId = sessionUser?.id || "anon";
-  const currentUserName = sessionUser?.user_metadata?.name || sessionUser?.email?.split("@")[0] || "User";
-  const currentUserEmail = sessionUser?.email || "user@gis.id";
+
+  let localUser = null;
+  try {
+    localUser = JSON.parse(localStorage.getItem("wd_user"));
+  } catch {}
+
+  const currentUserId = sessionUser?.id || (localUser?.email !== "user@gis.id" ? localUser?.id : null) || null;
+  const currentUserName = sessionUser?.user_metadata?.name || sessionUser?.email?.split("@")[0] || (localUser?.email !== "user@gis.id" ? localUser?.name : "") || "";
+  const rawEmail = sessionUser?.email || (localUser?.email !== "user@gis.id" ? localUser?.email : "") || "";
+  const currentUserEmail = rawEmail.trim().toLowerCase();
 
   const ok = (resData) => ({ data: resData, status: 200, statusText: "OK" });
 
   // 1. AUTH /auth/me
   if (cleanUrl === "auth/me" && method === "get") {
+    if (!currentUserEmail) {
+      const err = new Error("Unauthenticated");
+      err.response = { status: 401, data: { detail: "Sesi tidak ditemukan" } };
+      throw err;
+    }
     return ok({
       id: currentUserId,
       email: currentUserEmail,
-      name: currentUserName,
+      name: currentUserName || currentUserEmail.split("@")[0],
       created_at: sessionUser?.created_at || now,
     });
   }
