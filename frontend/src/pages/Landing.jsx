@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { Button } from "../components/ui/button";
 import { toast } from "sonner";
-import { HardDrive, GitMerge, Mail, Shield, Clock, LayoutDashboard, Sparkles } from "lucide-react";
+import { HardDrive, GitMerge, Mail, Shield, Clock, LayoutDashboard, Sparkles, Compass } from "lucide-react";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -34,12 +34,12 @@ export default function Landing() {
     <div className="min-h-screen bg-background accent-glow">
       <header className="px-6 py-5 flex items-center justify-between max-w-7xl mx-auto">
         <div className="flex items-center gap-2.5" data-testid="landing-brand">
-          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500 to-emerald-500 flex items-center justify-center">
-            <HardDrive className="h-4 w-4 text-white" />
+          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500 via-sky-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+            <Compass className="h-5 w-5 text-white" />
           </div>
           <div>
-            <div className="font-bold tracking-tight" style={{ fontFamily: "Plus Jakarta Sans" }}>WorkflowDrive</div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Project OS</div>
+            <div className="font-extrabold tracking-tight text-lg bg-gradient-to-r from-white via-indigo-100 to-cyan-200 bg-clip-text text-transparent" style={{ fontFamily: "Plus Jakarta Sans" }}>GeoFlow</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Geospatial Project OS</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -139,7 +139,7 @@ export default function Landing() {
         </div>
       </section>
       <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground">
-        WorkflowDrive · MVP dengan Google Drive & SendGrid mocked
+        GeoFlow · The Modern Operating System for Geospatial Projects
       </footer>
     </div>
   );

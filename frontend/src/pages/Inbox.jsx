@@ -41,7 +41,7 @@ export default function Inbox() {
   const shareWhatsApp = (item) => {
     const fullUrl = item.link?.startsWith("http") ? item.link : `${window.location.origin}${item.link}`;
     const text = encodeURIComponent(
-      `Halo! Anda diundang bergabung ke proyek "${item.project_name || "WorkflowDrive"}" sebagai ${item.role || "tim"}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${fullUrl}`
+      `Halo! Anda diundang bergabung ke proyek "${item.project_name || "GeoFlow"}" sebagai ${item.role || "tim"}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${fullUrl}`
     );
     window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
   };

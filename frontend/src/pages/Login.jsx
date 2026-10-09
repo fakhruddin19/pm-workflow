@@ -6,7 +6,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
-import { HardDrive, Sparkles } from "lucide-react";
+import { Compass, Sparkles } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -54,10 +54,13 @@ export default function Login() {
       <Card className="w-full max-w-md bg-card border-border">
         <CardHeader className="space-y-4">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500 to-emerald-500 flex items-center justify-center">
-              <HardDrive className="h-4 w-4 text-white" />
+            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500 via-sky-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+              <Compass className="h-5 w-5 text-white" />
             </div>
-            <div className="font-bold" style={{ fontFamily: "Plus Jakarta Sans" }}>WorkflowDrive</div>
+            <div>
+              <div className="font-extrabold text-lg leading-tight bg-gradient-to-r from-white via-indigo-100 to-cyan-200 bg-clip-text text-transparent" style={{ fontFamily: "Plus Jakarta Sans" }}>GeoFlow</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Geospatial Project OS</div>
+            </div>
           </div>
           <div>
             <CardTitle className="text-2xl" style={{ fontFamily: "Plus Jakarta Sans" }}>Masuk ke akun Anda</CardTitle>

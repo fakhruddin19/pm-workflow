@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import { api } from "../lib/api";
 import { Button } from "../components/ui/button";
@@ -40,6 +40,8 @@ import {
   CheckCircle2,
   UserMinus,
   TrendingUp,
+  Copy,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDuration, durationLevel, getSlaInfo, initials, normalizeStages, stageNames } from "../lib/utils";
@@ -139,6 +141,7 @@ function TaskCard({ task, stageNameList, isOwner, onMove, onSubmit, onDelete }) 
 
 export default function ProjectDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [membersData, setMembersData] = useState({ owner: null, members: [] });
@@ -151,6 +154,9 @@ export default function ProjectDetail() {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [submittingTask, setSubmittingTask] = useState(null);
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadAll = useCallback(() => {
     setLoading(true);
@@ -198,6 +204,36 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleDuplicateProject = async () => {
+    setDuplicating(true);
+    try {
+      const res = await api.post(`/projects/${id}/duplicate`);
+      toast.success(`Proyek "${project.name}" berhasil diduplikat`);
+      if (res.data?.id) {
+        navigate(`/projects/${res.data.id}`);
+      } else {
+        navigate("/projects");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Gagal menduplikat project");
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/projects/${id}`);
+      toast.success(`Proyek "${project.name}" berhasil dihapus`);
+      navigate("/projects");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Gagal menghapus project");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading || !project) {
     return (
       <Layout>
@@ -211,7 +247,7 @@ export default function ProjectDetail() {
       title={project.name}
       subtitle={project.description || "Tidak ada deskripsi"}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
           {project.drive_folder_url && (
             <a
               href={project.drive_folder_url}
@@ -223,9 +259,34 @@ export default function ProjectDetail() {
               <HardDrive className="h-3.5 w-3.5" /> Google Drive
             </a>
           )}
-          <Badge variant="outline" className="border-indigo-500/30 text-indigo-200" data-testid="role-badge">
+          <Badge variant="outline" className="border-indigo-500/30 text-indigo-200 font-mono text-[11px]" data-testid="role-badge">
             {project.role}
           </Badge>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleDuplicateProject}
+            disabled={duplicating}
+            className="h-8 text-xs border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10"
+            title="Duplikat seluruh struktur dan pekerjaan proyek ini"
+            data-testid="duplicate-project-btn"
+          >
+            <Copy className="h-3.5 w-3.5 mr-1" />
+            {duplicating ? "Menyalin..." : "Duplikat"}
+          </Button>
+          {isOwner && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDeleteProjectOpen(true)}
+              className="h-8 text-xs border-rose-500/30 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+              title="Hapus proyek ini secara permanen"
+              data-testid="delete-project-btn"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Hapus
+            </Button>
+          )}
         </div>
       }
     >
@@ -510,6 +571,42 @@ export default function ProjectDetail() {
         task={submittingTask}
         onSubmitted={loadAll}
       />
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog open={deleteProjectOpen} onOpenChange={setDeleteProjectOpen}>
+        <DialogContent className="bg-card border-border max-w-md" data-testid="delete-project-modal">
+          <DialogHeader>
+            <DialogTitle className="text-rose-400 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Hapus Proyek
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              Apakah Anda yakin ingin menghapus proyek <span className="font-semibold text-foreground">"{project?.name}"</span>?
+              Semua alur kerja, tugas, data personel, deliverable, dan kurva S terkait akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteProjectOpen(false)}
+              disabled={deleting}
+              className="text-xs"
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteProject}
+              disabled={deleting}
+              className="bg-rose-600 hover:bg-rose-700 text-xs font-semibold"
+              data-testid="confirm-delete-project-btn"
+            >
+              {deleting ? "Menghapus..." : "Ya, Hapus Proyek"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
@@ -717,16 +814,16 @@ function InviteDialog({ open, onOpenChange, projectId, onInvited }) {
   const shareWhatsApp = (r = role, targetEmail = email) => {
     const link = directInviteLink(targetEmail);
     const text = encodeURIComponent(
-      `Halo! Anda diundang bergabung ke proyek di WorkflowDrive sebagai ${r}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${link}`
+      `Halo! Anda diundang bergabung ke proyek di GeoFlow sebagai ${r}.\n\nBuka link proyek untuk mulai berkolaborasi:\n${link}`
     );
     window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
   };
 
   const openGmail = (targetEmail, targetRole) => {
     const link = directInviteLink(targetEmail);
-    const subject = encodeURIComponent("Undangan Bergabung ke Proyek WorkflowDrive");
+    const subject = encodeURIComponent("Undangan Bergabung ke Proyek GeoFlow");
     const body = encodeURIComponent(
-      `Halo!\n\nSaya mengundang Anda untuk bergabung ke proyek di WorkflowDrive sebagai ${targetRole}.\n\nSilakan klik tautan di bawah ini untuk membuka proyek dan melihat tugas Anda:\n${link}\n\nTerima kasih!`
+      `Halo!\n\nSaya mengundang Anda untuk bergabung ke proyek di GeoFlow sebagai ${targetRole}.\n\nSilakan klik tautan di bawah ini untuk membuka proyek dan melihat tugas Anda:\n${link}\n\nTerima kasih!`
     );
     window.open(
       `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&su=${subject}&body=${body}`,

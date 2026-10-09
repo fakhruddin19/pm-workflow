@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../components/ui/dialog";
-import { Plus, FolderKanban, HardDrive, X } from "lucide-react";
+import { Plus, FolderKanban, HardDrive, X, Copy, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Projects() {
@@ -31,11 +31,44 @@ export default function Projects() {
   ]);
   const [newStage, setNewStage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleteConfirmProject, setDeleteConfirmProject] = useState(null);
+  const [duplicatingId, setDuplicatingId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = () => api.get("/projects").then((r) => setProjects(r.data));
   useEffect(() => {
     load();
   }, []);
+
+  const handleDuplicate = async (project, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDuplicatingId(project.id);
+    try {
+      await api.post(`/projects/${project.id}/duplicate`);
+      toast.success(`Proyek "${project.name}" berhasil diduplikat`);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Gagal menduplikat project");
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirmProject) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/projects/${deleteConfirmProject.id}`);
+      toast.success(`Proyek "${deleteConfirmProject.name}" berhasil dihapus`);
+      setDeleteConfirmProject(null);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Gagal menghapus project");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const addStage = () => {
     const s = newStage.trim();
@@ -206,41 +239,108 @@ export default function Projects() {
             <Link
               key={p.id}
               to={`/projects/${p.id}`}
-              className="group p-5 rounded-xl border border-border bg-card hover:border-indigo-500/40 transition-all"
+              className="group p-5 rounded-xl border border-border bg-card hover:border-indigo-500/40 transition-all flex flex-col justify-between"
               data-testid={`project-card-${p.id}`}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className="font-bold text-base" style={{ fontFamily: "Plus Jakarta Sans" }}>
-                  {p.name}
-                </div>
-                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-border text-muted-foreground">
-                  {p.role}
-                </span>
-              </div>
-              <div className="text-sm text-muted-foreground line-clamp-2 min-h-[40px]">
-                {p.description || "Tidak ada deskripsi"}
-              </div>
-              <div className="flex flex-wrap gap-1 mt-3">
-                {(p.stages || []).map((s, idx) => {
-                  const nm = typeof s === "string" ? s : s.name;
-                  const sla = typeof s === "string" ? null : s.sla_hours;
-                  return (
-                    <span key={`${nm}-${idx}`} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                      {nm}
-                      {sla ? ` · ${sla}j` : ""}
+              <div>
+                <div className="flex items-start justify-between mb-3 gap-2">
+                  <div className="font-bold text-base leading-tight group-hover:text-indigo-300 transition-colors" style={{ fontFamily: "Plus Jakarta Sans" }}>
+                    {p.name}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-border text-muted-foreground font-mono">
+                      {p.role}
                     </span>
-                  );
-                })}
+                    <div className="flex items-center gap-0.5 bg-background/80 rounded-md p-0.5 border border-border/50">
+                      <button
+                        type="button"
+                        title="Duplikat Proyek"
+                        disabled={duplicatingId === p.id}
+                        onClick={(e) => handleDuplicate(p, e)}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-indigo-300 transition-colors"
+                        data-testid={`duplicate-project-btn-${p.id}`}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                      {p.role === "owner" && (
+                        <button
+                          type="button"
+                          title="Hapus Proyek"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDeleteConfirmProject(p);
+                          }}
+                          className="p-1 rounded hover:bg-rose-500/10 text-muted-foreground hover:text-rose-400 transition-colors"
+                          data-testid={`delete-project-btn-${p.id}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground line-clamp-2 min-h-[40px]">
+                  {p.description || "Tidak ada deskripsi"}
+                </div>
+                <div className="flex flex-wrap gap-1 mt-3">
+                  {(p.stages || []).map((s, idx) => {
+                    const nm = typeof s === "string" ? s : s.name;
+                    const sla = typeof s === "string" ? null : s.sla_hours;
+                    return (
+                      <span key={`${nm}-${idx}`} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                        {nm}
+                        {sla ? ` · ${sla}j` : ""}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
               {p.drive_folder_url && (
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-emerald-300">
-                  <HardDrive className="h-3 w-3" /> Terhubung Drive
+                <div className="mt-4 pt-2 border-t border-border/30 flex items-center gap-1.5 text-[11px] text-emerald-300">
+                  <HardDrive className="h-3 w-3" /> Terhubung Google Drive
                 </div>
               )}
             </Link>
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmProject} onOpenChange={(isOpen) => !isOpen && setDeleteConfirmProject(null)}>
+        <DialogContent className="bg-card border-border max-w-md" data-testid="delete-project-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-rose-400 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" /> Hapus Proyek
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              Apakah Anda yakin ingin menghapus proyek <span className="font-semibold text-foreground">"{deleteConfirmProject?.name}"</span>?
+              Semua alur kerja, tugas, data personel, dan kurva S terkait akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteConfirmProject(null)}
+              disabled={deleting}
+              className="text-xs"
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-rose-600 hover:bg-rose-700 text-xs font-semibold"
+              data-testid="confirm-delete-project-btn"
+            >
+              {deleting ? "Menghapus..." : "Ya, Hapus Proyek"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

@@ -8,6 +8,7 @@ import {
   Inbox as InboxIcon,
   LogOut,
   HardDrive,
+  Compass,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import {
@@ -43,15 +44,15 @@ export default function Layout({ children, title, subtitle, actions }) {
         data-testid="app-header"
       >
         <Link to="/dashboard" className="flex items-center gap-2.5 group" data-testid="brand-link">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <HardDrive className="h-4 w-4 text-white" />
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 via-sky-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform">
+            <Compass className="h-4 w-4 text-white" />
           </div>
           <div className="hidden sm:block">
-            <div className="font-bold tracking-tight text-base leading-none" style={{ fontFamily: "Plus Jakarta Sans" }}>
-              WorkflowDrive
+            <div className="font-extrabold tracking-tight text-base leading-none bg-gradient-to-r from-white via-indigo-100 to-cyan-200 bg-clip-text text-transparent" style={{ fontFamily: "Plus Jakarta Sans" }}>
+              GeoFlow
             </div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
-              Project OS
+              Geospatial Project OS
             </div>
           </div>
         </Link>

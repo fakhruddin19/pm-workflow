@@ -356,6 +356,57 @@ export async function handleLocalRequest(method, url, data) {
       setItem(STORAGE_KEYS.PROJECTS, updatedList);
       return ok(updated);
     }
+    if (method === "delete") {
+      const remainingProjects = projects.filter((p) => p.id !== projId);
+      setItem(STORAGE_KEYS.PROJECTS, remainingProjects);
+      const tasks = getItem(STORAGE_KEYS.TASKS, []).filter((t) => t.project_id !== projId);
+      setItem(STORAGE_KEYS.TASKS, tasks);
+      const members = getItem(STORAGE_KEYS.MEMBERS, []).filter((m) => m.project_id !== projId);
+      setItem(STORAGE_KEYS.MEMBERS, members);
+      const delivs = getItem(STORAGE_KEYS.DELIVERABLES, []).filter((d) => d.project_id !== projId);
+      setItem(STORAGE_KEYS.DELIVERABLES, delivs);
+      const workItems = getItem(STORAGE_KEYS.WORK_ITEMS, []).filter((w) => w.project_id !== projId);
+      setItem(STORAGE_KEYS.WORK_ITEMS, workItems);
+      return ok({ message: "Project deleted successfully" });
+    }
+  }
+
+  // Duplicate project: /projects/:id/duplicate
+  if (parts[0] === "projects" && parts[2] === "duplicate" && method === "post") {
+    const projId = parts[1];
+    const projects = getItem(STORAGE_KEYS.PROJECTS, []);
+    const orig = projects.find((p) => p.id === projId);
+    if (!orig) {
+      const err = new Error("Project not found");
+      err.response = { data: { detail: "Project not found" }, status: 404 };
+      throw err;
+    }
+    const newId = "proj-" + Date.now();
+    const newProj = {
+      ...orig,
+      id: newId,
+      name: `${orig.name} (Salinan)`,
+      created_at: now,
+      role: "owner",
+    };
+    projects.unshift(newProj);
+    setItem(STORAGE_KEYS.PROJECTS, projects);
+
+    // Duplicate work items if any
+    const workItems = getItem(STORAGE_KEYS.WORK_ITEMS, []);
+    const origWorkItems = workItems.filter((w) => w.project_id === projId);
+    origWorkItems.forEach((wi) => {
+      workItems.push({
+        ...wi,
+        id: "wi-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+        project_id: newId,
+        actual_progress: 0,
+        created_at: now,
+      });
+    });
+    setItem(STORAGE_KEYS.WORK_ITEMS, workItems);
+
+    return ok(newProj);
   }
 
   // 5. PROJECT WORKFLOW /projects/:id/workflow

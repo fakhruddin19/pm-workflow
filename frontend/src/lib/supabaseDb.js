@@ -319,6 +319,71 @@ export async function handleSupabaseRequest(method, url, data) {
       if (error) throw error;
       return ok({ ...updated, role: "owner" });
     }
+    if (method === "delete") {
+      await supabase.from("tasks").delete().eq("project_id", projId);
+      await supabase.from("project_members").delete().eq("project_id", projId);
+      await supabase.from("deliverables").delete().eq("project_id", projId);
+      const { error } = await supabase.from("projects").delete().eq("id", projId);
+      if (error) throw error;
+      return ok({ message: "Project deleted successfully" });
+    }
+  }
+
+  // 5b. DUPLICATE PROJECT /projects/:id/duplicate
+  if (parts[0] === "projects" && parts[2] === "duplicate" && method === "post") {
+    const projId = parts[1];
+    const { data: orig, error: origErr } = await supabase.from("projects").select("*").eq("id", projId).single();
+    if (origErr) throw origErr;
+
+    const newProjId = "proj-" + Date.now();
+    const newProj = {
+      id: newProjId,
+      name: `${orig.name} (Salinan)`,
+      description: orig.description || "",
+      drive_folder_url: orig.drive_folder_url || "",
+      stages: orig.stages || [],
+      owner_id: currentUserId,
+      created_at: now,
+    };
+    const { data: created, error: crtErr } = await supabase.from("projects").insert(newProj).select().single();
+    if (crtErr) throw crtErr;
+
+    // Add owner membership
+    await supabase.from("project_members").insert({
+      id: "mem-" + Date.now(),
+      project_id: created.id,
+      user_id: currentUserId,
+      email: currentUserEmail,
+      name: currentUserName,
+      role: "owner",
+      created_at: now,
+    });
+
+    // Copy work items with progress reset to 0
+    const { data: origWorkItems } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("project_id", projId)
+      .eq("stage", "__work_item__");
+
+    if (origWorkItems && origWorkItems.length > 0) {
+      for (const wi of origWorkItems) {
+        await supabase.from("tasks").insert({
+          id: "wi-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+          project_id: created.id,
+          title: wi.title,
+          description: wi.description || "",
+          stage: "__work_item__",
+          assignee: {
+            ...wi.assignee,
+            actual_progress: 0,
+          },
+          created_at: now,
+        });
+      }
+    }
+
+    return ok({ ...created, role: "owner" });
   }
 
   // 6. WORKFLOW /projects/:id/workflow
