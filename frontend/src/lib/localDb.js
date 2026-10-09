@@ -1,3 +1,5 @@
+import { computeSCurve, todayISO, addDaysISO } from "./scurveCalc";
+
 // Smart Local Database Engine for WorkflowDrive (Standalone & Offline Mode)
 // Stores all users, projects, workflow stages, tasks, and deliverables in localStorage.
 
@@ -7,6 +9,7 @@ const STORAGE_KEYS = {
   TOKEN: "wd_token",
   PROJECTS: "wd_local_projects",
   TASKS: "wd_local_tasks",
+  WORK_ITEMS: "wd_local_work_items",
   MEMBERS: "wd_local_members",
   DELIVERABLES: "wd_local_deliverables",
   EMAIL_LOGS: "wd_local_logs",
@@ -143,6 +146,60 @@ export function seedDemoData() {
       },
     ];
     setItem(STORAGE_KEYS.DELIVERABLES, demoDeliverables);
+
+    const demoWorkItems = [
+      {
+        id: "wi-demo-1",
+        project_id: projId,
+        name: "Pengukuran Titik Kontrol GCP & Ortofoto",
+        weight: 15,
+        start_date: addDaysISO(todayISO(), -10),
+        end_date: addDaysISO(todayISO(), -3),
+        actual_progress: 100,
+        created_at: now,
+      },
+      {
+        id: "wi-demo-2",
+        project_id: projId,
+        name: "Akuisisi Foto Udara Drone LiDAR",
+        weight: 25,
+        start_date: addDaysISO(todayISO(), -6),
+        end_date: addDaysISO(todayISO(), 3),
+        actual_progress: 85,
+        created_at: now,
+      },
+      {
+        id: "wi-demo-3",
+        project_id: projId,
+        name: "Pengolahan Mozaik Orthomosaic & DSM",
+        weight: 20,
+        start_date: addDaysISO(todayISO(), -1),
+        end_date: addDaysISO(todayISO(), 9),
+        actual_progress: 45,
+        created_at: now,
+      },
+      {
+        id: "wi-demo-4",
+        project_id: projId,
+        name: "Digitasi Vektor Tematik & Topologi",
+        weight: 25,
+        start_date: addDaysISO(todayISO(), 4),
+        end_date: addDaysISO(todayISO(), 16),
+        actual_progress: 15,
+        created_at: now,
+      },
+      {
+        id: "wi-demo-5",
+        project_id: projId,
+        name: "Penyusunan Metadata Katalog & Submit BIG",
+        weight: 15,
+        start_date: addDaysISO(todayISO(), 12),
+        end_date: addDaysISO(todayISO(), 22),
+        actual_progress: 0,
+        created_at: now,
+      },
+    ];
+    setItem(STORAGE_KEYS.WORK_ITEMS, demoWorkItems);
   }
 
   return demoUser;
@@ -360,6 +417,111 @@ export async function handleLocalRequest(method, url, data) {
       const filtered = tasks.filter((t) => t.id !== taskId);
       setItem(STORAGE_KEYS.TASKS, filtered);
       return ok({ message: "Task deleted" });
+    }
+  }
+
+  // 6b. WORK ITEMS & S-CURVE /projects/:id/work-items & /projects/:id/s-curve
+  if (parts[0] === "projects" && (parts[2] === "work-items" || parts[2] === "s-curve")) {
+    const projId = parts[1];
+    let workItems = getItem(STORAGE_KEYS.WORK_ITEMS, []);
+
+    if (parts[2] === "work-items") {
+      // GET /projects/:id/work-items
+      if (parts.length === 3 && method === "get") {
+        return ok(workItems.filter((w) => w.project_id === projId));
+      }
+
+      // POST /projects/:id/work-items
+      if (parts.length === 3 && method === "post") {
+        const newItem = {
+          id: "wi-" + Date.now(),
+          project_id: projId,
+          name: data.name || "Item Pekerjaan",
+          description: data.description || "",
+          weight: Number(data.weight) || 0,
+          start_date: data.start_date || todayISO(),
+          end_date: data.end_date || addDaysISO(todayISO(), 7),
+          actual_progress: Number(data.actual_progress) || 0,
+          created_at: now,
+        };
+        workItems.push(newItem);
+        setItem(STORAGE_KEYS.WORK_ITEMS, workItems);
+        return ok(newItem);
+      }
+
+      // PATCH /projects/:id/work-items/:itemId
+      if (parts.length === 4 && method === "patch") {
+        const itemId = parts[3];
+        const idx = workItems.findIndex((w) => w.id === itemId);
+        if (idx !== -1) {
+          workItems[idx] = {
+            ...workItems[idx],
+            ...(data.name !== undefined && { name: data.name }),
+            ...(data.weight !== undefined && { weight: Number(data.weight) }),
+            ...(data.start_date !== undefined && { start_date: data.start_date }),
+            ...(data.end_date !== undefined && { end_date: data.end_date }),
+            ...(data.actual_progress !== undefined && { actual_progress: Number(data.actual_progress) }),
+          };
+          setItem(STORAGE_KEYS.WORK_ITEMS, workItems);
+          return ok(workItems[idx]);
+        }
+      }
+
+      // DELETE /projects/:id/work-items/:itemId
+      if (parts.length === 4 && method === "delete") {
+        const itemId = parts[3];
+        workItems = workItems.filter((w) => w.id !== itemId);
+        setItem(STORAGE_KEYS.WORK_ITEMS, workItems);
+        return ok({ message: "Work item deleted" });
+      }
+    }
+
+    if (parts[2] === "s-curve") {
+      // POST /projects/:id/s-curve/sync-tasks
+      if (parts.length === 4 && parts[3] === "sync-tasks" && method === "post") {
+        const tasks = getItem(STORAGE_KEYS.TASKS, []).filter((t) => t.project_id === projId && t.stage !== "__work_item__");
+        const projects = getItem(STORAGE_KEYS.PROJECTS, []);
+        const proj = projects.find((p) => p.id === projId);
+        const stagesList = (proj?.stages || []).map((s) => (typeof s === "string" ? s : s.name));
+
+        if (tasks.length > 0) {
+          const count = tasks.length;
+          const equalWeight = Number((100 / count).toFixed(2));
+          const tToday = todayISO();
+          tasks.forEach((t, i) => {
+            const stageIndex = stagesList.indexOf(t.stage);
+            let prog = 0;
+            if (stageIndex >= 0 && stagesList.length > 1) {
+              prog = Math.round((stageIndex / (stagesList.length - 1)) * 100);
+            }
+            const sDate = t.created_at ? t.created_at.slice(0, 10) : tToday;
+            const existingIdx = workItems.findIndex((w) => w.id === `wi-sync-${t.id}`);
+            const wiObj = {
+              id: `wi-sync-${t.id}`,
+              project_id: projId,
+              name: t.title,
+              weight: i === count - 1 ? Number((100 - equalWeight * (count - 1)).toFixed(2)) : equalWeight,
+              start_date: sDate,
+              end_date: addDaysISO(sDate, 7),
+              actual_progress: prog,
+              created_at: now,
+            };
+            if (existingIdx !== -1) {
+              workItems[existingIdx] = wiObj;
+            } else {
+              workItems.push(wiObj);
+            }
+          });
+          setItem(STORAGE_KEYS.WORK_ITEMS, workItems);
+        }
+      }
+
+      // GET /projects/:id/s-curve
+      if (method === "get") {
+        const items = workItems.filter((w) => w.project_id === projId);
+        const calc = computeSCurve(items);
+        return ok(calc);
+      }
     }
   }
 

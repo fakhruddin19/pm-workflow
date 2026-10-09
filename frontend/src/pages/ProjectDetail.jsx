@@ -39,10 +39,12 @@ import {
   Clock,
   CheckCircle2,
   UserMinus,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDuration, durationLevel, getSlaInfo, initials, normalizeStages, stageNames } from "../lib/utils";
 import WorkflowDiagram from "../components/WorkflowDiagram";
+import SCurveTab from "../components/SCurveTab";
 
 function Timer({ fromISO, slaDays }) {
   const [, setT] = useState(0);
@@ -232,6 +234,10 @@ export default function ProjectDetail() {
           <TabsTrigger value="kanban" data-testid="tab-kanban">
             Workflow Kanban
           </TabsTrigger>
+          <TabsTrigger value="scurve" data-testid="tab-scurve" className="flex items-center gap-1.5">
+            <TrendingUp className="h-4 w-4 text-indigo-400" />
+            Kurva S
+          </TabsTrigger>
           <TabsTrigger value="deliverables" data-testid="tab-deliverables">
             Deliverables
           </TabsTrigger>
@@ -315,6 +321,11 @@ export default function ProjectDetail() {
               );
             })}
           </div>
+        </TabsContent>
+
+        {/* S-Curve Tab */}
+        <TabsContent value="scurve" className="space-y-6">
+          <SCurveTab projectId={id} isOwner={isOwner} projectTasks={tasks} />
         </TabsContent>
 
         {/* Deliverables Tab */}

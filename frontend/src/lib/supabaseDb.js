@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { computeSCurve } from "./scurveCalc";
 
 export async function handleSupabaseRequest(method, url, data) {
   if (!supabase) throw new Error("Supabase is not configured");
@@ -180,12 +181,12 @@ export async function handleSupabaseRequest(method, url, data) {
     );
 
     const myTasks = tsks.filter(
-      (t) => t.assignee?.id === currentUserId || (t.assignee?.email && t.assignee.email.toLowerCase() === emailLower)
+      (t) => t.stage !== "__work_item__" && (t.assignee?.id === currentUserId || (t.assignee?.email && t.assignee.email.toLowerCase() === emailLower))
     );
 
     const stageCounts = {};
     tsks
-      .filter((t) => visibleProjects.some((vp) => vp.id === t.project_id))
+      .filter((t) => t.stage !== "__work_item__" && visibleProjects.some((vp) => vp.id === t.project_id))
       .forEach((t) => {
         const s = t.stage || "Drafter";
         stageCounts[s] = (stageCounts[s] || 0) + 1;
@@ -208,7 +209,7 @@ export async function handleSupabaseRequest(method, url, data) {
     return ok({
       total_projects: visibleProjects.length,
       owned_projects: projs.filter((p) => p.owner_id === currentUserId).length,
-      total_tasks: tsks.filter((t) => visibleProjects.some((vp) => vp.id === t.project_id)).length,
+      total_tasks: tsks.filter((t) => t.stage !== "__work_item__" && visibleProjects.some((vp) => vp.id === t.project_id)).length,
       my_tasks: myTasks.length,
       stage_counts: stageCounts,
       recent_emails: recentNotifs.slice(0, 5),
@@ -337,6 +338,7 @@ export async function handleSupabaseRequest(method, url, data) {
         .from("tasks")
         .select("*")
         .eq("project_id", projId)
+        .neq("stage", "__work_item__")
         .order("created_at", { ascending: true });
       if (error) throw error;
       const formattedTasks = (tasks || []).map((t) => ({
@@ -440,6 +442,188 @@ export async function handleSupabaseRequest(method, url, data) {
       const { error } = await supabase.from("tasks").delete().eq("id", taskId);
       if (error) throw error;
       return ok({ message: "Task deleted" });
+    }
+  }
+
+  // 7b. WORK ITEMS & S-CURVE /projects/:id/work-items & /projects/:id/s-curve
+  if (parts[0] === "projects" && (parts[2] === "work-items" || parts[2] === "s-curve")) {
+    const projId = parts[1];
+
+    if (parts[2] === "work-items") {
+      // GET /projects/:id/work-items
+      if (parts.length === 3 && method === "get") {
+        const { data: rawItems, error } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("project_id", projId)
+          .eq("stage", "__work_item__")
+          .order("created_at", { ascending: true });
+        if (error) throw error;
+        const items = (rawItems || []).map((t) => ({
+          id: t.id,
+          project_id: t.project_id,
+          name: t.title,
+          description: t.description || "",
+          weight: Number(t.assignee?.weight) || 0,
+          start_date: t.assignee?.start_date || t.created_at?.slice(0, 10),
+          end_date: t.assignee?.end_date || t.created_at?.slice(0, 10),
+          actual_progress: Number(t.assignee?.actual_progress) || 0,
+          created_at: t.created_at,
+        }));
+        return ok(items);
+      }
+
+      // POST /projects/:id/work-items
+      if (parts.length === 3 && method === "post") {
+        const newItem = {
+          id: "wi-" + Date.now(),
+          project_id: projId,
+          title: data.name || "Item Pekerjaan",
+          description: data.description || "",
+          stage: "__work_item__",
+          assignee: {
+            weight: Number(data.weight) || 0,
+            start_date: data.start_date || now.slice(0, 10),
+            end_date: data.end_date || now.slice(0, 10),
+            actual_progress: Number(data.actual_progress) || 0,
+          },
+          created_at: now,
+        };
+        const { data: created, error } = await supabase.from("tasks").insert(newItem).select().single();
+        if (error) throw error;
+        return ok({
+          id: created.id,
+          project_id: created.project_id,
+          name: created.title,
+          weight: Number(created.assignee?.weight) || 0,
+          start_date: created.assignee?.start_date,
+          end_date: created.assignee?.end_date,
+          actual_progress: Number(created.assignee?.actual_progress) || 0,
+          created_at: created.created_at,
+        });
+      }
+
+      // PATCH /projects/:id/work-items/:itemId
+      if (parts.length === 4 && method === "patch") {
+        const itemId = parts[3];
+        const { data: existing, error: getErr } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("id", itemId)
+          .single();
+        if (getErr) throw getErr;
+
+        const currentAssignee = existing.assignee || {};
+        const updatedAssignee = {
+          ...currentAssignee,
+          ...(data.weight !== undefined && { weight: Number(data.weight) }),
+          ...(data.start_date !== undefined && { start_date: data.start_date }),
+          ...(data.end_date !== undefined && { end_date: data.end_date }),
+          ...(data.actual_progress !== undefined && { actual_progress: Number(data.actual_progress) }),
+        };
+
+        const updateFields = {
+          ...(data.name !== undefined && { title: data.name }),
+          ...(data.description !== undefined && { description: data.description }),
+          assignee: updatedAssignee,
+        };
+
+        const { data: updated, error: updErr } = await supabase
+          .from("tasks")
+          .update(updateFields)
+          .eq("id", itemId)
+          .select()
+          .single();
+        if (updErr) throw updErr;
+
+        return ok({
+          id: updated.id,
+          project_id: updated.project_id,
+          name: updated.title,
+          weight: Number(updated.assignee?.weight) || 0,
+          start_date: updated.assignee?.start_date,
+          end_date: updated.assignee?.end_date,
+          actual_progress: Number(updated.assignee?.actual_progress) || 0,
+          created_at: updated.created_at,
+        });
+      }
+
+      // DELETE /projects/:id/work-items/:itemId
+      if (parts.length === 4 && method === "delete") {
+        const itemId = parts[3];
+        const { error } = await supabase.from("tasks").delete().eq("id", itemId);
+        if (error) throw error;
+        return ok({ message: "Work item deleted" });
+      }
+    }
+
+    if (parts[2] === "s-curve") {
+      // POST /projects/:id/s-curve/sync-tasks
+      if (parts.length === 4 && parts[3] === "sync-tasks" && method === "post") {
+        const { data: project } = await supabase.from("projects").select("stages").eq("id", projId).single();
+        const stagesList = (project?.stages || []).map((s) => (typeof s === "string" ? s : s.name));
+        const { data: regularTasks } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("project_id", projId)
+          .neq("stage", "__work_item__");
+
+        if (regularTasks && regularTasks.length > 0) {
+          const count = regularTasks.length;
+          const equalWeight = Number((100 / count).toFixed(2));
+          const today = now.slice(0, 10);
+          for (let i = 0; i < regularTasks.length; i++) {
+            const t = regularTasks[i];
+            const stageIndex = stagesList.indexOf(t.stage);
+            let prog = 0;
+            if (stageIndex >= 0 && stagesList.length > 1) {
+              prog = Math.round((stageIndex / (stagesList.length - 1)) * 100);
+            }
+            const sDate = t.created_at ? t.created_at.slice(0, 10) : today;
+            const eDate = today;
+            const newWi = {
+              id: "wi-sync-" + t.id,
+              project_id: projId,
+              title: t.title,
+              description: t.description || "",
+              stage: "__work_item__",
+              assignee: {
+                weight: i === regularTasks.length - 1 ? Number((100 - equalWeight * (count - 1)).toFixed(2)) : equalWeight,
+                start_date: sDate,
+                end_date: eDate >= sDate ? eDate : sDate,
+                actual_progress: prog,
+              },
+              created_at: now,
+            };
+            await supabase.from("tasks").upsert(newWi);
+          }
+        }
+      }
+
+      // GET /projects/:id/s-curve
+      if (method === "get") {
+        const { data: rawItems } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("project_id", projId)
+          .eq("stage", "__work_item__")
+          .order("created_at", { ascending: true });
+
+        const items = (rawItems || []).map((t) => ({
+          id: t.id,
+          project_id: t.project_id,
+          name: t.title,
+          description: t.description || "",
+          weight: Number(t.assignee?.weight) || 0,
+          start_date: t.assignee?.start_date || t.created_at?.slice(0, 10),
+          end_date: t.assignee?.end_date || t.created_at?.slice(0, 10),
+          actual_progress: Number(t.assignee?.actual_progress) || 0,
+          created_at: t.created_at,
+        }));
+
+        const calculated = computeSCurve(items);
+        return ok(calculated);
+      }
     }
   }
 
