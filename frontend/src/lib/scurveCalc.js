@@ -72,7 +72,9 @@ export function computeSCurve(items = [], today = todayISO()) {
   const curr = new Date(padMin);
   const end = new Date(padMax);
 
-  while (curr <= end) {
+  let loopLimit = 0;
+  while (curr <= end && loopLimit < 730) {
+    loopLimit++;
     const dStr = curr.toISOString().slice(0, 10);
     let dayPlanned = 0;
     let dayActual = 0;
@@ -140,7 +142,7 @@ export function computeSCurve(items = [], today = todayISO()) {
     return {
       date: p.date,
       label: `${monthNames[Number(m)] || m} ${y}`,
-      monthKey,
+      monthKey: mKey,
       planned: p.planned,
       actual: p.actual,
       itemPoints: p.itemPoints,
