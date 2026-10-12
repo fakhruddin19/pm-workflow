@@ -177,7 +177,7 @@ export async function handleSupabaseRequest(method, url, data) {
     );
 
     const visibleProjects = projs.filter(
-      (p) => p.owner_id === currentUserId || memberProjectIds.has(p.id)
+      (p) => !p.id.startsWith("__") && (p.owner_id === currentUserId || memberProjectIds.has(p.id))
     );
 
     const myTasks = tsks.filter(
@@ -237,7 +237,7 @@ export async function handleSupabaseRequest(method, url, data) {
     });
 
     const list = (projects || [])
-      .filter((p) => p.owner_id === currentUserId || membershipRoleMap[p.id])
+      .filter((p) => !p.id.startsWith("__") && (p.owner_id === currentUserId || membershipRoleMap[p.id]))
       .map((p) => ({
         ...p,
         role: p.owner_id === currentUserId ? "owner" : (membershipRoleMap[p.id] || "member"),
@@ -280,6 +280,11 @@ export async function handleSupabaseRequest(method, url, data) {
   // 5. PROJECT DETAIL /projects/:id
   if (parts[0] === "projects" && parts.length === 2) {
     const projId = parts[1];
+    if (projId.startsWith("__")) {
+      const err = new Error("Project not found");
+      err.response = { status: 404, data: { detail: "Project not found" } };
+      throw err;
+    }
     if (method === "get") {
       const { data: proj, error } = await supabase.from("projects").select("*").eq("id", projId).single();
       if (error) throw error;

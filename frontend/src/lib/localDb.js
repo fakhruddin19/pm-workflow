@@ -217,6 +217,11 @@ export async function handleLocalRequest(method, url, data) {
 
   // 1. AUTH
   if (cleanUrl.startsWith("auth/register") && method === "post") {
+    if (!data.password || data.password.length < 6) {
+      const err = new Error("Password minimal 6 karakter");
+      err.response = { data: { detail: "Password minimal 6 karakter" }, status: 400 };
+      throw err;
+    }
     const users = getItem(STORAGE_KEYS.USERS, []);
     const existing = users.find((u) => u.email.toLowerCase() === data.email.toLowerCase());
     if (existing) {
@@ -228,6 +233,7 @@ export async function handleLocalRequest(method, url, data) {
       id: "usr-" + Date.now(),
       email: data.email.toLowerCase(),
       name: data.name || data.email.split("@")[0],
+      password: data.password,
       created_at: now,
     };
     users.push(newUser);
@@ -237,18 +243,22 @@ export async function handleLocalRequest(method, url, data) {
   }
 
   if (cleanUrl.startsWith("auth/login") && method === "post") {
+    if (!data.password || data.password.length < 6) {
+      const err = new Error("Password minimal 6 karakter");
+      err.response = { data: { detail: "Password minimal 6 karakter" }, status: 400 };
+      throw err;
+    }
     const users = getItem(STORAGE_KEYS.USERS, []);
-    let user = users.find((u) => u.email.toLowerCase() === data.email.toLowerCase());
+    const user = users.find((u) => u.email.toLowerCase() === data.email.toLowerCase());
     if (!user) {
-      // Auto-create user for frictionless login if not found
-      user = {
-        id: "usr-" + Date.now(),
-        email: data.email.toLowerCase(),
-        name: data.email.split("@")[0],
-        created_at: now,
-      };
-      users.push(user);
-      setItem(STORAGE_KEYS.USERS, users);
+      const err = new Error("Akun belum terdaftar");
+      err.response = { data: { detail: "Akun belum terdaftar. Silakan daftar terlebih dahulu." }, status: 404 };
+      throw err;
+    }
+    if (user.password && user.password !== data.password) {
+      const err = new Error("Email atau password salah");
+      err.response = { data: { detail: "Email atau password salah. Silakan periksa kembali." }, status: 401 };
+      throw err;
     }
     const token = "local-jwt-" + Date.now();
     return ok({ token, user });

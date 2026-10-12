@@ -23,6 +23,10 @@ export default function Login() {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (!password || password.length < 6) {
+      toast.error("Password minimal 6 karakter");
+      return;
+    }
     setLoading(true);
     try {
       await login(email, password);
@@ -30,7 +34,7 @@ export default function Login() {
       const dest = (location.state?.from?.pathname || "/dashboard") + (location.state?.from?.search || "");
       navigate(dest, { replace: true });
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Login gagal");
+      toast.error(err?.response?.data?.detail || err?.message || "Login gagal");
     } finally {
       setLoading(false);
     }
@@ -88,9 +92,10 @@ export default function Login() {
                 id="password"
                 type="password"
                 required
+                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="min. 6 karakter"
                 data-testid="password-input"
                 className="bg-background"
               />

@@ -34,7 +34,7 @@ export default function Register() {
       const dest = (location.state?.from?.pathname || "/dashboard") + (location.state?.from?.search || "");
       navigate(dest, { replace: true });
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Pendaftaran gagal");
+      toast.error(err?.response?.data?.detail || err?.message || "Pendaftaran gagal");
     } finally {
       setLoading(false);
     }
@@ -91,6 +91,7 @@ export default function Register() {
                 id="password"
                 type="password"
                 required
+                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="min. 6 karakter"
